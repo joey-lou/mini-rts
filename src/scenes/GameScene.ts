@@ -42,13 +42,13 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 		this.scene.launch("HUDScene");
 	}
 
-	private static readonly MIN_ZOOM = 0.4;
-	private static readonly MAX_ZOOM = 2.0;
+	private static readonly MIN_ZOOM = 0.7;
+	private static readonly MAX_ZOOM = 1.4;
 
 	private setupCameraZoom(): void {
-		this.input.on("wheel", (_pointer: Phaser.Input.Pointer, _go: unknown, _dx: number, _dy: number, dz: number) => {
+		this.input.on("wheel", (_pointer: Phaser.Input.Pointer, _go: unknown, _dx: number, dy: number) => {
 			const cam = this.cameras.main;
-			const rate = 1 - dz * 0.001;
+			const rate = 1 - dy * 0.001;
 			const newZoom = Phaser.Math.Clamp(cam.zoom * rate, GameScene.MIN_ZOOM, GameScene.MAX_ZOOM);
 			cam.setZoom(newZoom);
 		});
@@ -238,12 +238,18 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 		});
 
 		this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-			if (pointer.rightButtonDown()) {
+			const isRight = pointer.rightButtonDown() || pointer.button === 2;
+			if (isRight) {
 				this.moveSelectedUnits(pointer.worldX, pointer.worldY);
 			}
 		});
 
 		this.input.mouse?.disableContextMenu();
+		// Ensure context menu is blocked so right-click reaches the game (belt-and-suspenders with index.html)
+		const canvas = this.sys.game.canvas;
+		if (canvas) {
+			canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+		}
 	}
 
 	private startSelection(pointer: Phaser.Input.Pointer): void {

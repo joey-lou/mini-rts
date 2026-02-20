@@ -10,6 +10,7 @@ const config: Phaser.Types.Core.GameConfig = {
   height: 1080,
   parent: 'game-container',
   backgroundColor: '#2d2d44',
+  disableContextMenu: true,
   scene: [PreloadScene, MenuScene, GameScene, HUDScene],
   physics: {
     default: 'arcade',

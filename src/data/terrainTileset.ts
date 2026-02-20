@@ -1,9 +1,7 @@
 /**
- * ExamplePack terrain tileset: 9 cols × 6 rows = 54 frames (64×64 each).
- * Frame index = col + row * 9  (e.g. row 2, col 3 → frame 2*9+3 = 21).
- *
- * To match your pack: open Tilemap_color1.png, count from 0 left-to-right top-to-bottom,
- * and set flat / raised / stairs to the frame indices where those tiles appear.
+ * Terrain tileset: 9 cols × 6 rows = 54 frames (64×64 each).
+ * Frame index = col + row * 9  (e.g. row 2, col 3 → frame 21).
+ * Edit flat / raised / stairs to match your Tilemap_color1–3.png layout.
  */
 export const TERRAIN_TILESET = {
   cols: 9,

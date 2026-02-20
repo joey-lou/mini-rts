@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 
-/** Medieval unit types (ExamplePack) */
+/** Medieval unit types. */
 export type UnitType = "knight" | "footman" | "archer" | "peasant" | "lancer";
 
 /** Scene interface for combat effects (slash, arrow) so Unit does not depend on GameScene. */
@@ -30,8 +30,8 @@ const UNIT_CONFIG: Record<
 	lancer: { speed: 110, size: 40, health: 100, attackRange: 55, attackDamage: 20, attackCooldownMs: 900 },
 };
 
-/** Display size for ExamplePack sprites (original frames 192×192). */
-const EXAMPLE_PACK_DISPLAY_SIZE = 104;
+/** Display size for 192×192 unit sprite sheets. */
+const UNIT_SPRITE_DISPLAY_SIZE = 104;
 
 export type Team = "player" | "enemy";
 
@@ -82,7 +82,7 @@ export class Unit extends Phaser.GameObjects.Container {
 		const base = UNIT_MAP[unitType];
 		const sheet = `${base.sheet}-${color}`;
 		if (scene.textures.exists(sheet)) {
-			this._displayHeight = EXAMPLE_PACK_DISPLAY_SIZE;
+			this._displayHeight = UNIT_SPRITE_DISPLAY_SIZE;
 			this.idleAnim = `${base.idleAnim}-${color}`;
 			this.runAnim = `${base.runAnim}-${color}`;
 			this.attackAnim = `${base.attackAnim}-${color}`;

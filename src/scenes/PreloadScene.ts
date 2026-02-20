@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-/** Frame dimensions for ExamplePack 192×192 sprite sheets. */
+/** Frame dimensions for 192×192 unit sprite sheets. */
 export const FRAME = { frameWidth: 192, frameHeight: 192 };
 
 /**
@@ -56,7 +56,7 @@ export class PreloadScene extends Phaser.Scene {
     });
 
     // ============================================
-    // UNITS (ExamplePack 192×192 sprite sheets)
+    // UNITS (192×192 sprite sheets, blue/red by team)
     // ============================================
     const unitsBase = 'assets/sprites/units';
     for (const color of ['blue', 'red']) {
@@ -83,7 +83,7 @@ export class PreloadScene extends Phaser.Scene {
     // ============================================
     // BUILDINGS
     // ============================================
-    const BLD = 'assets/sprites/buildings/examplepack';
+    const BLD = 'assets/sprites/buildings';
     this.load.image('building-castle', `${BLD}/Castle.png`);
     this.load.image('building-barracks', `${BLD}/Barracks.png`);
     this.load.image('building-archery', `${BLD}/Archery.png`);
@@ -93,7 +93,7 @@ export class PreloadScene extends Phaser.Scene {
     // ============================================
     // TERRAIN
     // ============================================
-    const TER = 'assets/sprites/terrain/examplepack';
+    const TER = 'assets/sprites/terrain';
     this.load.spritesheet('terrain-tileset1', `${TER}/Tilemap_color1.png`, { frameWidth: 64, frameHeight: 64 });
     this.load.spritesheet('terrain-tileset2', `${TER}/Tilemap_color2.png`, { frameWidth: 64, frameHeight: 64 });
     this.load.spritesheet('terrain-tileset3', `${TER}/Tilemap_color3.png`, { frameWidth: 64, frameHeight: 64 });
@@ -104,7 +104,7 @@ export class PreloadScene extends Phaser.Scene {
     this.loadAsset('tile-ore', 'assets/sprites/terrain/ore');
 
     // ============================================
-    // UI ELEMENTS (ExamplePack bars, buttons, icons)
+    // UI ELEMENTS
     // ============================================
     const UI = 'assets/sprites/ui';
     this.load.image('ui-bigbar-base', `${UI}/BigBar_Base.png`);

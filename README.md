@@ -1,6 +1,6 @@
 # Medieval Keep
 
-A medieval-themed strategy demo built with Phaser 3 and TypeScript. Uses the **ExamplePack** asset pack for units, buildings, and terrain.
+A medieval-themed strategy demo built with Phaser 3 and TypeScript.
 
 ## Getting Started
 
@@ -39,8 +39,8 @@ Output is in `dist/`.
 
 ## Demo Content
 
-- **Terrain**: ExamplePack tiles (flat, raised, stairs, water)
-- **Buildings**: Castle, Barracks, Archery, Tower (Blue theme)
+- **Terrain**: Tiles (flat, raised, stairs, water)
+- **Buildings**: Castle, Barracks, Archery, Tower
 - **Units**: Knights (warrior), Footmen (pawn), Archers (archer), Peasants (pawn) with idle/run animations
 
 ## Project Structure
@@ -61,9 +61,9 @@ rts/
 │       └── Pathfinding.ts
 ├── assets/
 │   └── sprites/
-│       ├── units/examplepack/   # Pawn, Warrior, Archer (idle/run)
-│       ├── buildings/examplepack/  # Castle, Barracks, Archery, Tower
-│       └── terrain/examplepack/    # Tilemap_color1–3, water
+│       ├── units/blue/, units/red/   # Pawn, Warrior, Archer, Lancer (idle/run)
+│       ├── buildings/                # Castle, Barracks, Archery, Tower
+│       └── terrain/                  # Tilemap_color1–3, water
 ├── index.html
 ├── package.json
 ├── tsconfig.json
@@ -84,4 +84,3 @@ rts/
 - **Phaser 3**: Game framework
 - **TypeScript**: Type-safe JavaScript
 - **Vite**: Build and dev server
-# mini-rts

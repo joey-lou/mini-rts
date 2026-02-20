@@ -14,13 +14,14 @@ The game will use colored placeholder shapes until you add the real sprites.
 
 ## Units (`assets/sprites/units/`)
 
-The game uses **ExamplePack** color variants: **blue** (player) and **red** (enemy). No tint mask—each team uses its own sprite set.
+Team variants: **blue** (player) and **red** (enemy). Each team has its own sprite set.
 
-Layout (from `/Downloads/ExamplePack` or similar):
+Layout:
 - `units/blue/Pawn/` — Pawn_Idle.png, Pawn_Run.png
-- `units/blue/Warrior/` — Warrior_Idle.png, Warrior_Run.png
-- `units/blue/Archer/` — Archer_Idle.png, Archer_Run.png
-- `units/red/` — same structure with Red Units sprites
+- `units/blue/Warrior/` — Warrior_Idle.png, Warrior_Run.png, Warrior_Attack1/2.png, Warrior_Guard.png
+- `units/blue/Archer/` — Archer_Idle.png, Archer_Run.png, Archer_Shoot.png
+- `units/blue/Lancer/` — Lancer_Idle.png, Lancer_Run.png, Lancer_*_Attack.png, etc.
+- `units/red/` — same structure
 
 Frame size: **192×192** per frame (horizontal strip).
 
