@@ -435,102 +435,92 @@ export class TileTestScene extends Phaser.Scene {
   }
 
   /**
-   * Test 6: Ramp/stair tiles between flat and elevated terrain.
-   * Shows individual ramp frames and a composed transition scene.
+   * Test 6: Elevation compositing + Ramp/stair paired tiles.
+   * Shows how elevated surface + cliff face stack to create height,
+   * and how stair pairs (upper+lower) create transitions.
    */
   private renderTest6_RampStairs(): void {
     const startX = 50;
     const startY = 100;
     const tilesetKey = 'terrain-tileset1';
+    const HEIGHT_OFFSET = 24;
 
     if (!this.textures.exists(tilesetKey)) {
       this.addLabel(startX, startY, 'ERROR: Tileset not loaded!');
       return;
     }
 
-    this.addLabel(startX, startY - 40, 'Test 6: Ramp/Stair Tiles');
+    this.addLabel(startX, startY - 40, 'Test 6: Elevation Compositing + Stair Pairs');
 
-    // Section A: Show all candidate ramp frames individually
-    this.addLabel(startX, startY, 'Row 4-5 left-section frames (potential ramp/strip tiles):');
+    // Section A: Show how elevated surface + cliff compose
+    this.addLabel(startX, startY, 'A) Elevated = surface tile (shifted up) + cliff tile (below):');
+    const compY = startY + 20;
+    // Flat ground base
+    this.placeTile(startX, compY, FLAT.CENTER, DEPTH.FLAT);
+    this.placeTile(startX + TILE_SIZE, compY, FLAT.CENTER, DEPTH.FLAT);
+    this.placeTile(startX + TILE_SIZE * 2, compY, FLAT.CENTER, DEPTH.FLAT);
+    this.placeTile(startX, compY + TILE_SIZE, FLAT.CENTER, DEPTH.FLAT);
+    this.placeTile(startX + TILE_SIZE, compY + TILE_SIZE, FLAT.CENTER, DEPTH.FLAT);
+    this.placeTile(startX + TILE_SIZE * 2, compY + TILE_SIZE, FLAT.CENTER, DEPTH.FLAT);
+    // Elevated surface (shifted up by HEIGHT_OFFSET)
+    this.placeTile(startX, compY - HEIGHT_OFFSET, ELEVATED_TOP.TOP_LEFT, DEPTH.ELEVATED);
+    this.placeTile(startX + TILE_SIZE, compY - HEIGHT_OFFSET, ELEVATED_TOP.TOP, DEPTH.ELEVATED);
+    this.placeTile(startX + TILE_SIZE * 2, compY - HEIGHT_OFFSET, ELEVATED_TOP.TOP_RIGHT, DEPTH.ELEVATED);
+    this.placeTile(startX, compY + TILE_SIZE - HEIGHT_OFFSET, ELEVATED_TOP.BOTTOM_LEFT, DEPTH.ELEVATED);
+    this.placeTile(startX + TILE_SIZE, compY + TILE_SIZE - HEIGHT_OFFSET, ELEVATED_TOP.BOTTOM, DEPTH.ELEVATED);
+    this.placeTile(startX + TILE_SIZE * 2, compY + TILE_SIZE - HEIGHT_OFFSET, ELEVATED_TOP.BOTTOM_RIGHT, DEPTH.ELEVATED);
+    // Cliff faces directly below the elevated surface
+    const cliffStartY = compY + TILE_SIZE * 2 - HEIGHT_OFFSET;
+    this.placeTile(startX, cliffStartY, CLIFF.TOP_LEFT, DEPTH.CLIFF);
+    this.placeTile(startX + TILE_SIZE, cliffStartY, CLIFF.TOP, DEPTH.CLIFF);
+    this.placeTile(startX + TILE_SIZE * 2, cliffStartY, CLIFF.TOP_RIGHT, DEPTH.CLIFF);
 
-    const candidateFrames = [36, 37, 38, 39, 45, 46, 47, 48];
-    const labels = ['36 strip-top', '37 strip-v', '38 stair-R', '39 stair-L',
-                     '45 strip-bot', '46', '47 stair-R2', '48 stair-L2'];
-    candidateFrames.forEach((frame, i) => {
-      const x = startX + (i % 4) * (TILE_SIZE + 40);
-      const y = startY + 20 + Math.floor(i / 4) * (TILE_SIZE + 30);
-      this.placeTile(x, y, frame, 5);
-      this.add.text(x, y + TILE_SIZE + 2, labels[i], {
-        fontSize: '10px', color: '#ffff00',
-      }).setDepth(DEPTH.UI);
-    });
+    // Section B: Show stair pairs
+    const pairY = compY + TILE_SIZE * 3 + 40;
+    this.addLabel(startX, pairY - 20, 'B) Stair pairs (upper + lower stacked):');
 
-    // Section B: Composed scene — flat island with elevated platform and ramp transitions
-    const compX = startX;
-    const compY = startY + 220;
-    this.addLabel(compX, compY - 20, 'Composed: Flat ground + Elevated platform + Ramp transitions');
+    // Pair A: frames 36 + 45
+    this.addLabel(startX, pairY, 'Pair A (36+45):');
+    this.placeTile(startX, pairY + 16, RAMP.A_UPPER, DEPTH.ELEVATED - 1);
+    this.placeTile(startX, pairY + 16 + TILE_SIZE, RAMP.A_LOWER, DEPTH.ELEVATED - 1);
+    this.addFrameLabel(startX, pairY + 16, RAMP.A_UPPER);
+    this.addFrameLabel(startX, pairY + 16 + TILE_SIZE, RAMP.A_LOWER);
 
-    // Flat ground base (8 wide × 6 tall)
-    const baseCols = 8;
-    const baseRows = 6;
-    for (let row = 0; row < baseRows; row++) {
-      for (let col = 0; col < baseCols; col++) {
-        const hasN = row > 0;
-        const hasE = col < baseCols - 1;
-        const hasS = row < baseRows - 1;
-        const hasW = col > 0;
-        const pos = determineTilePosition(hasN, hasE, hasS, hasW);
-        const frame = getFlatFrame(pos);
-        this.placeTile(compX + col * TILE_SIZE, compY + row * TILE_SIZE, frame, DEPTH.FLAT);
+    // Pair B: frames 37 + 46
+    const pairBX = startX + TILE_SIZE + 60;
+    this.addLabel(pairBX, pairY, 'Pair B (37+46):');
+    this.placeTile(pairBX, pairY + 16, RAMP.B_UPPER, DEPTH.ELEVATED - 1);
+    this.placeTile(pairBX, pairY + 16 + TILE_SIZE, RAMP.B_LOWER, DEPTH.ELEVATED - 1);
+    this.addFrameLabel(pairBX, pairY + 16, RAMP.B_UPPER);
+    this.addFrameLabel(pairBX, pairY + 16 + TILE_SIZE, RAMP.B_LOWER);
+
+    // Section C: Full composed scene with elevation + stairs
+    const sceneX = startX + TILE_SIZE * 4 + 20;
+    const sceneY = startY + 20;
+    this.addLabel(sceneX, sceneY - 20, 'C) Composed scene:');
+
+    // Flat ground (5×5)
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        const pos = determineTilePosition(r > 0, c < 4, r < 4, c > 0);
+        this.placeTile(sceneX + c * TILE_SIZE, sceneY + r * TILE_SIZE, getFlatFrame(pos), DEPTH.FLAT);
       }
     }
-
-    // Elevated platform (3×2) on top-right area of flat base
-    const elevOffX = 4;
-    const elevOffY = 1;
-    const elevCols = 3;
-    const elevRows = 2;
-    for (let row = 0; row < elevRows; row++) {
-      for (let col = 0; col < elevCols; col++) {
-        const hasN = row > 0;
-        const hasE = col < elevCols - 1;
-        const hasS = row < elevRows - 1;
-        const hasW = col > 0;
-        const pos = determineTilePosition(hasN, hasE, hasS, hasW);
+    // Elevated (2×2) in center, shifted up
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 2; c++) {
+        const pos = determineTilePosition(r > 0, c < 1, r < 1, c > 0);
         const eFrame = getElevatedTopFrame(pos);
-        const x = compX + (elevOffX + col) * TILE_SIZE;
-        const y = compY + (elevOffY + row) * TILE_SIZE;
-        this.placeTile(x, y, eFrame, DEPTH.ELEVATED);
+        this.placeTile(sceneX + (c + 2) * TILE_SIZE, sceneY + (r + 1) * TILE_SIZE - HEIGHT_OFFSET, eFrame, DEPTH.ELEVATED);
       }
     }
-
-    // Cliff faces below elevated platform
-    const cliffRow = elevOffY + elevRows;
-    for (let col = 0; col < elevCols; col++) {
-      let cliffFrame: number = CLIFF.TOP;
-      if (col === 0) cliffFrame = CLIFF.TOP_LEFT;
-      else if (col === elevCols - 1) cliffFrame = CLIFF.TOP_RIGHT;
-      const x = compX + (elevOffX + col) * TILE_SIZE;
-      const y = compY + cliffRow * TILE_SIZE;
-      this.placeTile(x, y, cliffFrame, DEPTH.CLIFF);
-    }
-
-    // Place ramp tiles at the transition points
-    // Ramp to the left of elevated platform (going from flat to elevated)
-    const rampX = compX + (elevOffX - 1) * TILE_SIZE;
-    const rampY1 = compY + elevOffY * TILE_SIZE;
-    const rampY2 = compY + (elevOffY + 1) * TILE_SIZE;
-    this.placeTile(rampX, rampY1, RAMP.STAIR_RIGHT, DEPTH.ELEVATED - 1);
-    this.addFrameLabel(rampX, rampY1, RAMP.STAIR_RIGHT);
-    this.placeTile(rampX, rampY2, RAMP.STAIR_RIGHT, DEPTH.ELEVATED - 1);
-
-    // Ramp below the elevated platform
-    const rampBelow = compY + (cliffRow + 1) * TILE_SIZE;
-    if (cliffRow + 1 < baseRows) {
-      const rx = compX + (elevOffX + 1) * TILE_SIZE;
-      this.placeTile(rx, rampBelow - TILE_SIZE, RAMP.STAIR_LEFT, DEPTH.ELEVATED - 1);
-      this.addFrameLabel(rx, rampBelow - TILE_SIZE, RAMP.STAIR_LEFT);
-    }
+    // Cliff faces below elevated
+    const cliffY2 = sceneY + 3 * TILE_SIZE - HEIGHT_OFFSET;
+    this.placeTile(sceneX + 2 * TILE_SIZE, cliffY2, CLIFF.TOP_LEFT, DEPTH.CLIFF);
+    this.placeTile(sceneX + 3 * TILE_SIZE, cliffY2, CLIFF.TOP_RIGHT, DEPTH.CLIFF);
+    // Stair pair next to elevated
+    this.placeTile(sceneX + 1 * TILE_SIZE, sceneY + 1 * TILE_SIZE, RAMP.A_UPPER, DEPTH.ELEVATED - 1);
+    this.placeTile(sceneX + 1 * TILE_SIZE, sceneY + 2 * TILE_SIZE, RAMP.A_LOWER, DEPTH.ELEVATED - 1);
   }
 
   /**

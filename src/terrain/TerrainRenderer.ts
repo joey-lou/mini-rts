@@ -18,7 +18,7 @@ import {
   CLIFF,
   TilePosition,
   determineTilePosition,
-  getRampFrame,
+  getRampFrames,
 } from './TinySwordsTiles';
 
 /** Depth layers for proper rendering order */
@@ -223,6 +223,9 @@ export class TerrainRenderer {
    * Render ramp tiles for cells with level RAMP.
    * Ramp frame is chosen from elevation neighbors (high = ELEVATED_1/ELEVATED_2) so slope goes low→high.
    */
+  /**
+   * Render ramp/stair tiles as vertically-paired composites (upper + lower frame).
+   */
   private renderRampTiles(): void {
     const { width, height } = this.map;
     const tilesetKey = 'terrain-tileset1';
@@ -238,10 +241,15 @@ export class TerrainRenderer {
         const highE = isElevated(this.map.getLevel(row, col + 1));
         const highS = isElevated(this.map.getLevel(row + 1, col));
         const highW = isElevated(this.map.getLevel(row, col - 1));
-        const frame = getRampFrame(highN, highE, highS, highW);
-        const tile = this.scene.add.sprite(x, y, tilesetKey, frame);
-        tile.setOrigin(0, 0).setDepth(DEPTH.RAMP_GROUND);
-        this.container!.add(tile);
+        const [upperFrame, lowerFrame] = getRampFrames(highN, highE, highS, highW);
+
+        const upper = this.scene.add.sprite(x, y, tilesetKey, upperFrame);
+        upper.setOrigin(0, 0).setDepth(DEPTH.RAMP_GROUND);
+        this.container!.add(upper);
+
+        const lower = this.scene.add.sprite(x, y + TILE_SIZE, tilesetKey, lowerFrame);
+        lower.setOrigin(0, 0).setDepth(DEPTH.RAMP_GROUND);
+        this.container!.add(lower);
       }
     }
   }
@@ -357,6 +365,11 @@ export class TerrainRenderer {
   /**
    * Render cliff face below elevated terrain.
    */
+  /**
+   * Render cliff face below elevated terrain.
+   * Cliff is positioned directly below the elevated surface tile so they
+   * connect seamlessly (surface bottom edge meets cliff top edge).
+   */
   private renderCliff(
     row: number,
     col: number,
@@ -369,7 +382,8 @@ export class TerrainRenderer {
     if (isElevated(southLevel) && southLevel >= level) return;
 
     const x = this.map.toPixelX(col);
-    const cliffY = this.map.toPixelY(row + 1);
+    // Position cliff right below the elevated surface: surface ends at y + TILE_SIZE + offset
+    const cliffY = this.map.toPixelY(row) + TILE_SIZE + getTerrainYOffset(level);
 
     if (hasTexture) {
       const elevW = isElevated(this.map.getLevel(row, col - 1)) && this.map.getLevel(row, col - 1) >= level;
@@ -388,7 +402,7 @@ export class TerrainRenderer {
         x + TILE_SIZE / 2,
         cliffY + TILE_SIZE / 2,
         TILE_SIZE - 2,
-        TILE_SIZE / 2,
+        TILE_SIZE,
         0x6a6a7a
       );
       rect.setDepth(depth);
@@ -404,16 +418,17 @@ export class TerrainRenderer {
     if (isElevated(southLevel) && southLevel >= level) return;
 
     const x = this.map.toPixelX(col);
-    const shadowY = this.map.toPixelY(row + 1);
-    const shadowAlpha = 0.2 + (level - 1) * 0.05;
+    // Shadow starts below the cliff face
+    const cliffBottom = this.map.toPixelY(row) + TILE_SIZE + getTerrainYOffset(level) + TILE_SIZE;
+    const shadowAlpha = 0.15 + (level - 1) * 0.05;
 
     const shadow = this.scene.add.graphics();
     shadow.setDepth(depth);
 
-    const shadowHeight = TILE_SIZE * 0.5;
+    const shadowHeight = TILE_SIZE * 0.4;
     for (let i = 0; i < 4; i++) {
       const segHeight = shadowHeight / 4;
-      const segY = shadowY + i * segHeight;
+      const segY = cliffBottom + i * segHeight;
       const alpha = shadowAlpha * (1 - i * 0.25);
       shadow.fillStyle(0x000000, alpha);
       shadow.fillRect(x, segY, TILE_SIZE, segHeight);

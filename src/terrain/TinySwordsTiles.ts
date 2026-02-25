@@ -74,16 +74,18 @@ export const FLAT = {
 } as const;
 
 /**
- * Ramp/stairs tiles.
- * Frames 38-39 (row 4 cols 2-3) and 47-48 (row 5 cols 2-3) are the
- * diagonal stair/ramp transition pieces in the Tiny Swords tileset.
- * Frames 36-37 and 45 are vertical-strip pieces (not ramps).
+ * Ramp/stairs tiles — two vertically-paired tiles per direction.
+ * Each pair has an UPPER frame (row 4) and a LOWER frame (row 5) that
+ * stack to create the full staircase connecting flat ground to elevated.
+ *
+ *   Pair A (col 0): 36 upper + 45 lower  — stairs ascending to the right/north
+ *   Pair B (col 1): 37 upper + 46 lower  — stairs ascending to the left/south
  */
 export const RAMP = {
-  STAIR_RIGHT: 38,
-  STAIR_LEFT: 39,
-  STAIR_RIGHT_ALT: 47,
-  STAIR_LEFT_ALT: 48,
+  A_UPPER: 36,
+  A_LOWER: 45,
+  B_UPPER: 37,
+  B_LOWER: 46,
 } as const;
 
 /**
@@ -196,18 +198,18 @@ export function getCliffFrame(position: 'LEFT' | 'CENTER' | 'RIGHT'): number {
 }
 
 /**
- * Choose a ramp frame based on which direction has elevated terrain.
- * Uses the diagonal stair pieces from the tileset.
+ * Choose a ramp frame pair (upper + lower) based on which direction has elevated terrain.
+ * Returns [upperFrame, lowerFrame] for vertical stacking.
  */
-export function getRampFrame(
+export function getRampFrames(
   highN: boolean,
   highE: boolean,
   highS: boolean,
   highW: boolean,
-): number {
-  if (highE || highN) return RAMP.STAIR_RIGHT;
-  if (highW || highS) return RAMP.STAIR_LEFT;
-  return RAMP.STAIR_RIGHT;
+): [number, number] {
+  if (highE || highN) return [RAMP.A_UPPER, RAMP.A_LOWER];
+  if (highW || highS) return [RAMP.B_UPPER, RAMP.B_LOWER];
+  return [RAMP.A_UPPER, RAMP.A_LOWER];
 }
 
 
