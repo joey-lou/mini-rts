@@ -58,7 +58,7 @@ export class PreloadScene extends Phaser.Scene {
     // ============================================
     // UNITS (192×192 sprite sheets, blue/red by team)
     // ============================================
-    const unitsBase = 'assets/sprites/units';
+    const unitsBase = 'sprites/units';
     for (const color of ['blue', 'red']) {
       const U = `${unitsBase}/${color}`;
       // Pawn (idle, run, optional work/build)
@@ -85,7 +85,7 @@ export class PreloadScene extends Phaser.Scene {
     // ============================================
     // BUILDINGS
     // ============================================
-    const BLD = 'assets/sprites/buildings';
+    const BLD = 'sprites/buildings';
     this.load.image('building-castle', `${BLD}/Castle.png`);
     this.load.image('building-barracks', `${BLD}/Barracks.png`);
     this.load.image('building-archery', `${BLD}/Archery.png`);
@@ -95,7 +95,7 @@ export class PreloadScene extends Phaser.Scene {
     // ============================================
     // TERRAIN
     // ============================================
-    const TER = 'assets/sprites/terrain';
+    const TER = 'sprites/terrain';
     this.load.spritesheet('terrain-tileset1', `${TER}/Tilemap_color1.png`, { frameWidth: 64, frameHeight: 64 });
     this.load.spritesheet('terrain-tileset2', `${TER}/Tilemap_color2.png`, { frameWidth: 64, frameHeight: 64 });
     this.load.spritesheet('terrain-tileset3', `${TER}/Tilemap_color3.png`, { frameWidth: 64, frameHeight: 64 });
@@ -105,7 +105,7 @@ export class PreloadScene extends Phaser.Scene {
     // ============================================
     // UI ELEMENTS
     // ============================================
-    const UI = 'assets/sprites/ui';
+    const UI = 'sprites/ui';
     this.load.image('ui-bigbar-base', `${UI}/BigBar_Base.png`);
     this.load.image('ui-bigbar-fill', `${UI}/BigBar_Fill.png`);
     this.load.image('ui-smallbar-base', `${UI}/SmallBar_Base.png`);
