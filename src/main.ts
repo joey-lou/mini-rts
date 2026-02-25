@@ -3,6 +3,9 @@ import { PreloadScene } from './scenes/PreloadScene';
 import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { HUDScene } from './scenes/HUDScene';
+import { TileDebugScene } from './scenes/TileDebugScene';
+import { TileTestScene } from './scenes/TileTestScene';
+import { MapEditorScene } from './scenes/MapEditorScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -11,7 +14,8 @@ const config: Phaser.Types.Core.GameConfig = {
   parent: 'game-container',
   backgroundColor: '#2d2d44',
   disableContextMenu: true,
-  scene: [PreloadScene, MenuScene, GameScene, HUDScene],
+  dom: { createContainer: true },
+  scene: [PreloadScene, MenuScene, GameScene, HUDScene, TileDebugScene, TileTestScene, MapEditorScene],
   physics: {
     default: 'arcade',
     arcade: {

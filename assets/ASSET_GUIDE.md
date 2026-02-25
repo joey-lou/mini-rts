@@ -45,14 +45,90 @@ Frame size: **192×192** per frame (horizontal strip).
 
 ## Terrain Tiles (`assets/sprites/terrain/`)
 
-These should tile seamlessly (edges match up when placed next to each other).
+The terrain system follows the [Tiny Swords Tilemap Guide](https://pixelfrog-assets.itch.io/tiny-swords/devlog/1138989/tilemap-guide).
 
-| Filename | Size | AI Prompt |
-|----------|------|-----------|
-| `grass.png` | 32x32 | "grass terrain tile, top-down, pixel art, 32x32, seamless tileable texture, game asset" |
-| `sand.png` | 32x32 | "desert sand terrain tile, top-down, pixel art, 32x32, seamless tileable texture, game asset" |
-| `concrete.png` | 32x32 | "concrete floor tile, top-down, pixel art, 32x32, seamless tileable texture, military base" |
-| `ore.png` | 32x32 | "ore deposit terrain tile, top-down, pixel art, 32x32, crystals or minerals, harvestable resource" |
+### Layer Order (bottom to top)
+
+1. **BG Color** - Water fill (teal background)
+2. **Water Foam** - Animated waves at water edges
+3. **Flat Ground** - Lowest walkable terrain
+4. **Shadow + Elevated Ground** - Repeated for each elevation level
+
+### Tileset Files
+
+| Filename | Size | Description |
+|----------|------|-------------|
+| `Tilemap_color1.png` | 576×384 | Green grass tileset (9×6 grid, 64×64 tiles) |
+| `Tilemap_color2.png` | 576×384 | Alternate color variant |
+| `Tilemap_color3.png` | 576×384 | Third color variant |
+| `water.png` | 64×64 | Water background tile |
+
+### Tileset Layout (9×6 grid = 54 frames)
+
+The tileset is divided into TWO main sections:
+
+**LEFT SECTION (cols 0-3): Flat Ground**
+
+Forms island/platform shapes on water level.
+
+```
+Frame Index = col + row × 9
+
+     Col0   Col1   Col2   Col3
+Row0:  0      1      2      3     ← Corners/Top (TL, T, TR, ?)
+Row1:  9     10     11     12     ← Edges/Center (L, C, R, ?)
+Row2: 18     19     20     21     ← Bottom (BL, B, BR, ?)
+Row3: 27     28     29     30     ← Strips/extensions
+Row4: 36     37     38     39     ← Stairs/variations
+Row5: 45     46     47     48     ← More variations
+```
+
+**Column 4: Spacer** (frames 4, 13, 22, 31, 40, 49 are empty)
+
+**RIGHT SECTION (cols 5-8): Elevated Terrain**
+
+Has two parts: grass surface (rows 0-2) and cliff faces (rows 3-5).
+
+```
+     Col5   Col6   Col7   Col8
+Row0:  5      6      7      8     ← Elevated surface (TL, T, TR)
+Row1: 14     15     16     17     ← Elevated surface (L, C, R)
+Row2: 23     24     25     26     ← Elevated surface (BL, B, BR)
+Row3: 32     33     34     35     ← Cliff faces (top)
+Row4: 41     42     43     44     ← Cliff faces (middle)
+Row5: 50     51     52     53     ← Cliff faces (bottom)
+```
+
+### Tile Usage
+
+**Flat Ground (3×3 island):**
+- Frame 0: Top-Left corner
+- Frame 1: Top edge
+- Frame 2: Top-Right corner
+- Frame 9: Left edge
+- Frame 10: Center (interior)
+- Frame 11: Right edge
+- Frame 18: Bottom-Left corner
+- Frame 19: Bottom edge
+- Frame 20: Bottom-Right corner
+
+**Elevated Surface (same pattern, offset by +5 cols):**
+- Frames 5, 6, 7, 14, 15, 16, 23, 24, 25
+
+**Cliff Faces (below elevated terrain):**
+- Frame 41: Cliff left
+- Frame 42: Cliff center
+- Frame 43: Cliff right
+
+### Tile Test Scene
+
+Access via Menu → "TILE TEST" or add `?tileTest=1` to URL.
+- Press 1-5 to switch between test maps
+- Test 5 shows the complete tileset with frame indices
+
+### Shadows
+
+Per the Tiny Swords guide, shadows are 128×128 sprites placed on 64×64 grid, shifted down one tile to create depth illusion for elevated terrain.
 
 ---
 
@@ -137,3 +213,30 @@ If something looks wrong:
 
 **Professional:**
 - [ComfyUI](https://github.com/comfyanonymous/ComfyUI) - Local, full control
+
+---
+
+## Free Asset Resources
+
+| Site | Best For |
+|------|----------|
+| [itch.io Game Assets](https://itch.io/game-assets) | Huge variety, many free packs |
+| [OpenGameArt.org](https://opengameart.org) | Free CC0/CC-BY sprites, tiles, sounds |
+| [Kenney.nl](https://kenney.nl/assets) | High-quality CC0 asset packs |
+| [The Spriters Resource](https://www.spriters-resource.com) | Ripped game sprites (reference/learning) |
+
+---
+
+## Credits
+
+This project uses the **Tiny Swords** asset pack by **Pixel Frog**:
+
+> **[Tiny Swords by Pixel Frog](https://pixelfrog-assets.itch.io/tiny-swords)**
+>
+> A medieval RTS asset pack including units (Warrior, Archer, Lancer, Monk, Pawn), buildings, terrain tiles, UI elements, and particle FX. Available in 5 faction colors (blue, red, purple, yellow, black).
+>
+> - **Free Pack**: Human units, buildings, resources, terrain, decorations, UI
+> - **Enemy Pack** (paid): 16 enemy characters + boat
+> - **License**: Free for personal and commercial use; credit appreciated but not required; no redistribution
+> - **Tilemap grid**: 64×64 pixels
+> - **Animation speed**: 10 fps (100 ms per frame)

@@ -9,12 +9,15 @@ export interface ICombatScene {
 	spawnArrow(attacker: Unit, target: Unit, damage: number): void;
 }
 
-/** Base texture/anim keys per unit type (suffix -blue or -red by team). */
-const UNIT_MAP: Record<UnitType, { sheet: string; idleAnim: string; runAnim: string; attackAnim: string; hitAnim: string }> = {
+/** Base texture/anim keys per unit type (suffix -blue or -red by team). buildAnim optional; if missing, build uses idle. */
+const UNIT_MAP: Record<
+	UnitType,
+	{ sheet: string; idleAnim: string; runAnim: string; attackAnim: string; hitAnim: string; buildAnim?: string }
+> = {
 	knight: { sheet: "unit-warrior-idle", idleAnim: "warrior-idle", runAnim: "warrior-run", attackAnim: "warrior-attack", hitAnim: "warrior-guard" },
 	footman: { sheet: "unit-pawn-idle", idleAnim: "pawn-idle", runAnim: "pawn-run", attackAnim: "pawn-attack", hitAnim: "pawn-idle" },
 	archer: { sheet: "unit-archer-idle", idleAnim: "archer-idle", runAnim: "archer-run", attackAnim: "archer-attack", hitAnim: "archer-idle" },
-	peasant: { sheet: "unit-pawn-idle", idleAnim: "pawn-idle", runAnim: "pawn-run", attackAnim: "pawn-idle", hitAnim: "pawn-idle" },
+	peasant: { sheet: "unit-pawn-idle", idleAnim: "pawn-idle", runAnim: "pawn-run", attackAnim: "pawn-idle", hitAnim: "pawn-idle", buildAnim: "pawn-work" },
 	lancer: { sheet: "unit-lancer-idle", idleAnim: "lancer-idle", runAnim: "lancer-run", attackAnim: "lancer-attack", hitAnim: "lancer-idle" },
 };
 
@@ -50,6 +53,7 @@ export class Unit extends Phaser.GameObjects.Container {
 	private runAnim: string;
 	private attackAnim: string;
 	private hitAnim: string;
+	private buildAnim: string;
 	private _wasMoving: boolean = false;
 	private _playingAttack = false;
 
@@ -64,6 +68,9 @@ export class Unit extends Phaser.GameObjects.Container {
 	/** A* waypoints; index advances as each waypoint is reached. */
 	private _waypoints: Phaser.Math.Vector2[] = [];
 	private _waypointIndex = 0;
+
+	/** When true, unit is playing build/work animation at a construction site. */
+	private _playingBuild = false;
 
 	constructor(scene: Phaser.Scene, x: number, y: number, unitType: UnitType = "knight", team: Team = "player") {
 		super(scene, x, y);
@@ -87,6 +94,7 @@ export class Unit extends Phaser.GameObjects.Container {
 			this.runAnim = `${base.runAnim}-${color}`;
 			this.attackAnim = `${base.attackAnim}-${color}`;
 			this.hitAnim = `${base.hitAnim}-${color}`;
+			this.buildAnim = base.buildAnim ? `${base.buildAnim}-${color}` : "";
 			this.sprite = scene.add.sprite(0, 0, sheet);
 			this.sprite.play(this.idleAnim);
 			this.sprite.setDisplaySize(this._displayHeight, this._displayHeight);
@@ -96,6 +104,7 @@ export class Unit extends Phaser.GameObjects.Container {
 			this.runAnim = "";
 			this.attackAnim = "";
 			this.hitAnim = "";
+			this.buildAnim = "";
 			this.sprite = scene.add.sprite(0, 0, `unit-${unitType}`);
 			this.sprite.setDisplaySize(this._displayHeight, this._displayHeight);
 		}
@@ -368,6 +377,25 @@ export class Unit extends Phaser.GameObjects.Container {
 		}
 		this.x += dx;
 		this.y += dy;
+	}
+
+	/** Play build/work animation at construction site. Uses dedicated buildAnim if present (e.g. from asset pack), else idle. */
+	playBuildAnimation(): void {
+		if (this._playingBuild) return;
+		this._playingBuild = true;
+		const anim = this.buildAnim && this.scene.anims.exists(this.buildAnim) ? this.buildAnim : this.idleAnim;
+		if (anim && this.scene.anims.exists(anim)) {
+			this.sprite.play(anim);
+		}
+	}
+
+	/** Stop build animation and return to idle. */
+	stopBuildAnimation(): void {
+		if (!this._playingBuild) return;
+		this._playingBuild = false;
+		if (this.idleAnim && this.scene.anims.exists(this.idleAnim)) {
+			this.sprite.play(this.idleAnim);
+		}
 	}
 
 	getIsSelected(): boolean {

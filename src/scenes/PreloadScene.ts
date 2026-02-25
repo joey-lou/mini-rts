@@ -61,9 +61,11 @@ export class PreloadScene extends Phaser.Scene {
     const unitsBase = 'assets/sprites/units';
     for (const color of ['blue', 'red']) {
       const U = `${unitsBase}/${color}`;
-      // Pawn
+      // Pawn (idle, run, optional work/build)
       this.load.spritesheet(`unit-pawn-idle-${color}`, `${U}/Pawn/Pawn_Idle.png`, FRAME);
       this.load.spritesheet(`unit-pawn-run-${color}`, `${U}/Pawn/Pawn_Run.png`, FRAME);
+      // Optional worker build animation: add Pawn_Work.png under assets/sprites/units/{color}/Pawn/ then uncomment:
+      // this.load.spritesheet(`unit-pawn-work-${color}`, `${U}/Pawn/Pawn_Work.png`, FRAME);
       // Warrior (idle, run, attack1, attack2, guard)
       this.load.spritesheet(`unit-warrior-idle-${color}`, `${U}/Warrior/Warrior_Idle.png`, FRAME);
       this.load.spritesheet(`unit-warrior-run-${color}`, `${U}/Warrior/Warrior_Run.png`, FRAME);
@@ -98,10 +100,7 @@ export class PreloadScene extends Phaser.Scene {
     this.load.spritesheet('terrain-tileset2', `${TER}/Tilemap_color2.png`, { frameWidth: 64, frameHeight: 64 });
     this.load.spritesheet('terrain-tileset3', `${TER}/Tilemap_color3.png`, { frameWidth: 64, frameHeight: 64 });
     this.load.image('terrain-water', `${TER}/water.png`);
-    this.loadAsset('tile-grass', 'assets/sprites/terrain/grass');
-    this.loadAsset('tile-sand', 'assets/sprites/terrain/sand');
-    this.loadAsset('tile-concrete', 'assets/sprites/terrain/concrete');
-    this.loadAsset('tile-ore', 'assets/sprites/terrain/ore');
+    // Optional terrain tiles: created as placeholders in create() if files are missing
 
     // ============================================
     // UI ELEMENTS
@@ -119,21 +118,11 @@ export class PreloadScene extends Phaser.Scene {
       const n = i.toString().padStart(2, '0');
       this.load.image(`ui-icon-${i}`, `${UI}/Icon_${n}.png`);
     }
-    this.loadAsset('ui-panel', 'assets/sprites/ui/panel');
-    this.loadAsset('ui-button', 'assets/sprites/ui/button');
-    this.loadAsset('ui-minimap-frame', 'assets/sprites/ui/minimap-frame');
+    // Optional UI: created as placeholders in create() if files are missing
 
     // ============================================
-    // EFFECTS
+    // EFFECTS (no load here to avoid 404; createPlaceholderSpriteSheets() in create() provides placeholders)
     // ============================================
-    this.load.spritesheet('effect-explosion', 'assets/sprites/effects/explosion.png', {
-      frameWidth: 64,
-      frameHeight: 64
-    });
-    this.load.spritesheet('effect-muzzle', 'assets/sprites/effects/muzzle-flash.png', {
-      frameWidth: 32,
-      frameHeight: 32
-    });
   }
 
   create(): void {
@@ -147,19 +136,19 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   private createAnimations(): void {
-    if (this.textures.exists('effect-explosion')) {
+    if (this.textures.exists('effect-explosion') && this.getFrameCount('effect-explosion') > 0) {
       this.anims.create({
         key: 'explosion',
-        frames: this.anims.generateFrameNumbers('effect-explosion', { start: 0, end: 7 }),
+        frames: this.safeFrameNumbers('effect-explosion', 7),
         frameRate: 15,
         repeat: 0
       });
     }
 
-    if (this.textures.exists('effect-muzzle')) {
+    if (this.textures.exists('effect-muzzle') && this.getFrameCount('effect-muzzle') > 0) {
       this.anims.create({
         key: 'muzzle-flash',
-        frames: this.anims.generateFrameNumbers('effect-muzzle', { start: 0, end: 3 }),
+        frames: this.safeFrameNumbers('effect-muzzle', 3),
         frameRate: 20,
         repeat: 0
       });
@@ -175,51 +164,70 @@ export class PreloadScene extends Phaser.Scene {
 
   private registerPawnAnims(color: string): void {
     if (!this.textures.exists(`unit-pawn-idle-${color}`)) return;
-    this.anims.create({ key: `pawn-idle-${color}`, frames: this.anims.generateFrameNumbers(`unit-pawn-idle-${color}`, { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
-    this.anims.create({ key: `pawn-run-${color}`, frames: this.anims.generateFrameNumbers(`unit-pawn-run-${color}`, { start: 0, end: 5 }), frameRate: 12, repeat: -1 });
-    this.anims.create({ key: `pawn-attack-${color}`, frames: this.anims.generateFrameNumbers(`unit-pawn-run-${color}`, { start: 0, end: 5 }), frameRate: 14, repeat: 0 });
+    this.anims.create({ key: `pawn-idle-${color}`, frames: this.safeFrameNumbers(`unit-pawn-idle-${color}`, 7), frameRate: 8, repeat: -1 });
+    this.anims.create({ key: `pawn-run-${color}`, frames: this.safeFrameNumbers(`unit-pawn-run-${color}`, 5), frameRate: 12, repeat: -1 });
+    this.anims.create({ key: `pawn-attack-${color}`, frames: this.safeFrameNumbers(`unit-pawn-run-${color}`, 5), frameRate: 14, repeat: 0 });
+    if (this.textures.exists(`unit-pawn-work-${color}`)) {
+      this.anims.create({ key: `pawn-work-${color}`, frames: this.safeFrameNumbers(`unit-pawn-work-${color}`, 7), frameRate: 8, repeat: -1 });
+    }
+  }
+
+  private getFrameCount(key: string): number {
+    if (!this.textures.exists(key)) return 0;
+    const tex = this.textures.get(key);
+    const names = tex.getFrameNames?.();
+    return names?.length ?? 0;
+  }
+
+  private safeFrameNumbers(key: string, maxEnd: number): Phaser.Types.Animations.AnimationFrame[] {
+    const end = Math.min(maxEnd, Math.max(0, this.getFrameCount(key) - 1));
+    return this.anims.generateFrameNumbers(key, { start: 0, end });
   }
 
   private registerWarriorAnims(color: string): void {
     if (!this.textures.exists(`unit-warrior-idle-${color}`)) return;
-    this.anims.create({ key: `warrior-idle-${color}`, frames: this.anims.generateFrameNumbers(`unit-warrior-idle-${color}`, { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
-    this.anims.create({ key: `warrior-run-${color}`, frames: this.anims.generateFrameNumbers(`unit-warrior-run-${color}`, { start: 0, end: 5 }), frameRate: 12, repeat: -1 });
+    this.anims.create({ key: `warrior-idle-${color}`, frames: this.safeFrameNumbers(`unit-warrior-idle-${color}`, 7), frameRate: 8, repeat: -1 });
+    this.anims.create({ key: `warrior-run-${color}`, frames: this.safeFrameNumbers(`unit-warrior-run-${color}`, 5), frameRate: 12, repeat: -1 });
 
     if (this.textures.exists(`unit-warrior-attack1-${color}`) && this.textures.exists(`unit-warrior-attack2-${color}`)) {
       const frames = [
-        ...this.anims.generateFrameNumbers(`unit-warrior-attack1-${color}`, { start: 0, end: 5 }),
-        ...this.anims.generateFrameNumbers(`unit-warrior-attack2-${color}`, { start: 0, end: 5 })
+        ...this.safeFrameNumbers(`unit-warrior-attack1-${color}`, 5),
+        ...this.safeFrameNumbers(`unit-warrior-attack2-${color}`, 5)
       ];
-      this.anims.create({ key: `warrior-attack-${color}`, frames, frameRate: 14, repeat: 0 });
+      if (frames.length > 0) {
+        this.anims.create({ key: `warrior-attack-${color}`, frames, frameRate: 14, repeat: 0 });
+      } else {
+        this.anims.create({ key: `warrior-attack-${color}`, frames: this.safeFrameNumbers(`unit-warrior-run-${color}`, 5), frameRate: 12, repeat: 0 });
+      }
     } else {
-      this.anims.create({ key: `warrior-attack-${color}`, frames: this.anims.generateFrameNumbers(`unit-warrior-run-${color}`, { start: 0, end: 5 }), frameRate: 12, repeat: 0 });
+      this.anims.create({ key: `warrior-attack-${color}`, frames: this.safeFrameNumbers(`unit-warrior-run-${color}`, 5), frameRate: 12, repeat: 0 });
     }
 
     if (this.textures.exists(`unit-warrior-guard-${color}`)) {
-      this.anims.create({ key: `warrior-guard-${color}`, frames: this.anims.generateFrameNumbers(`unit-warrior-guard-${color}`, { start: 0, end: 5 }), frameRate: 16, repeat: 0 });
+      this.anims.create({ key: `warrior-guard-${color}`, frames: this.safeFrameNumbers(`unit-warrior-guard-${color}`, 5), frameRate: 16, repeat: 0 });
     } else {
-      this.anims.create({ key: `warrior-guard-${color}`, frames: this.anims.generateFrameNumbers(`unit-warrior-idle-${color}`, { start: 0, end: 3 }), frameRate: 16, repeat: 0 });
+      this.anims.create({ key: `warrior-guard-${color}`, frames: this.safeFrameNumbers(`unit-warrior-idle-${color}`, 3), frameRate: 16, repeat: 0 });
     }
   }
 
   private registerArcherAnims(color: string): void {
     if (!this.textures.exists(`unit-archer-idle-${color}`)) return;
-    this.anims.create({ key: `archer-idle-${color}`, frames: this.anims.generateFrameNumbers(`unit-archer-idle-${color}`, { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
-    this.anims.create({ key: `archer-run-${color}`, frames: this.anims.generateFrameNumbers(`unit-archer-run-${color}`, { start: 0, end: 3 }), frameRate: 12, repeat: -1 });
+    this.anims.create({ key: `archer-idle-${color}`, frames: this.safeFrameNumbers(`unit-archer-idle-${color}`, 5), frameRate: 8, repeat: -1 });
+    this.anims.create({ key: `archer-run-${color}`, frames: this.safeFrameNumbers(`unit-archer-run-${color}`, 3), frameRate: 12, repeat: -1 });
 
     if (this.textures.exists(`unit-archer-shoot-${color}`)) {
-      this.anims.create({ key: `archer-attack-${color}`, frames: this.anims.generateFrameNumbers(`unit-archer-shoot-${color}`, { start: 0, end: 11 }), frameRate: 14, repeat: 0 });
+      this.anims.create({ key: `archer-attack-${color}`, frames: this.safeFrameNumbers(`unit-archer-shoot-${color}`, 11), frameRate: 14, repeat: 0 });
     } else {
-      this.anims.create({ key: `archer-attack-${color}`, frames: this.anims.generateFrameNumbers(`unit-archer-run-${color}`, { start: 0, end: 3 }), frameRate: 14, repeat: 0 });
+      this.anims.create({ key: `archer-attack-${color}`, frames: this.safeFrameNumbers(`unit-archer-run-${color}`, 3), frameRate: 14, repeat: 0 });
     }
   }
 
   private registerLancerAnims(color: string): void {
     if (!this.textures.exists(`unit-lancer-idle-${color}`)) return;
-    this.anims.create({ key: `lancer-idle-${color}`, frames: this.anims.generateFrameNumbers(`unit-lancer-idle-${color}`, { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
-    this.anims.create({ key: `lancer-run-${color}`, frames: this.anims.generateFrameNumbers(`unit-lancer-run-${color}`, { start: 0, end: 5 }), frameRate: 12, repeat: -1 });
+    this.anims.create({ key: `lancer-idle-${color}`, frames: this.safeFrameNumbers(`unit-lancer-idle-${color}`, 5), frameRate: 8, repeat: -1 });
+    this.anims.create({ key: `lancer-run-${color}`, frames: this.safeFrameNumbers(`unit-lancer-run-${color}`, 5), frameRate: 12, repeat: -1 });
     if (this.textures.exists(`unit-lancer-attack-${color}`)) {
-      this.anims.create({ key: `lancer-attack-${color}`, frames: this.anims.generateFrameNumbers(`unit-lancer-attack-${color}`, { start: 0, end: 5 }), frameRate: 14, repeat: 0 });
+      this.anims.create({ key: `lancer-attack-${color}`, frames: this.safeFrameNumbers(`unit-lancer-attack-${color}`, 5), frameRate: 14, repeat: 0 });
     }
   }
 

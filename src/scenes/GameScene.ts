@@ -1,16 +1,21 @@
 import Phaser from "phaser";
 import { Unit, UnitType, ICombatScene } from "../entities/Unit";
-import { Building } from "../entities/Building";
+import { Building, BuildingType } from "../entities/Building";
 import { Pathfinding } from "../systems/Pathfinding";
 import { EconomyManager } from "../systems/EconomyManager";
 import { ProductionQueue } from "../systems/ProductionQueue";
+import { TerrainMap, TerrainRenderer, generateTerrain, TILE_SIZE, TerrainLevel, SavedMapData } from "../terrain";
 
-/** Tile size in pixels */
-const TILE_SIZE = 64;
+/** Set to true or ?tileDebug=1 to log terrain generation details. */
+const DEBUG_TERRAIN =
+	typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tileDebug") === "1";
 /** World dimensions */
 const WORLD_COLS = 60;
 const WORLD_ROWS = 40;
 const DETECTION_RANGE = 400;
+const EDGE_PAN_MARGIN = 40;
+const EDGE_PAN_SPEED = 480;
+const KEYBOARD_PAN_SPEED = 400;
 
 export class GameScene extends Phaser.Scene implements ICombatScene {
 	public units: Unit[] = [];
@@ -18,142 +23,295 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 	private selectionBox: Phaser.GameObjects.Rectangle | null = null;
 	private selectionStart: Phaser.Math.Vector2 | null = null;
 	private isSelecting = false;
-	private unitCountText!: Phaser.GameObjects.Text;
 	private pathfinding!: Pathfinding;
 	public economy!: EconomyManager;
 	private buildings: Building[] = [];
+	private terrain!: TerrainMap;
+	private terrainRenderer!: TerrainRenderer;
+	// Build mode state
+	private buildMode = false;
+	private buildPreview: Phaser.GameObjects.Sprite | null = null;
+	private selectedBuildingType: string | null = null;
+	private buildModeWorker: Unit | null = null;
+	private buildingUnderConstruction: {
+		building: Building;
+		worker: Unit;
+		progress: number;
+		duration: number;
+		progressBar: Phaser.GameObjects.Graphics;
+	} | null = null;
+	private cursorKeys?: Phaser.Types.Input.Keyboard.CursorKeys;
+	private wasdKeys?: {
+		W: Phaser.Input.Keyboard.Key;
+		A: Phaser.Input.Keyboard.Key;
+		S: Phaser.Input.Keyboard.Key;
+		D: Phaser.Input.Keyboard.Key;
+	};
+	private static readonly BUILD_DURATION_MS = 4000;
+	private static readonly BUILD_SITE_RADIUS = 80;
 
 	constructor() {
 		super({ key: "GameScene" });
 	}
 
 	create(): void {
-		this.pathfinding = new Pathfinding(WORLD_COLS * TILE_SIZE, WORLD_ROWS * TILE_SIZE, TILE_SIZE);
+		const savedMap = this.registry.get("savedMapData") as SavedMapData | undefined;
+		const mapWidth = savedMap ? savedMap.width : WORLD_COLS;
+		const mapHeight = savedMap ? savedMap.height : WORLD_ROWS;
+		this.pathfinding = new Pathfinding(mapWidth * TILE_SIZE, mapHeight * TILE_SIZE, TILE_SIZE);
 		this.economy = new EconomyManager(this.events, 200, 2);
 
 		this.createTerrain();
-		this.placeBuildings();
-		this.spawnDemoUnits();
-		this.spawnEnemyUnits();
+		if (savedMap?.entities != null) {
+			this.spawnEntitiesFromData(savedMap.entities);
+		} else {
+			this.placeBuildings();
+			this.spawnDemoUnits();
+			this.spawnEnemyUnits();
+		}
 		this.setupInput();
 		this.setupCameraZoom();
-		this.createUI();
+		this.bindEvents();
 
 		this.scene.launch("HUDScene");
-	}
 
-	private static readonly MIN_ZOOM = 0.7;
-	private static readonly MAX_ZOOM = 1.4;
+		if (new URLSearchParams(window.location.search).get("tileDebug") === "1") {
+			this.scene.pause();
+			this.scene.launch("TileDebugScene");
+		}
+	}
 
 	private setupCameraZoom(): void {
+		const cam = this.cameras.main;
+		const worldWidth = this.terrain.width * TILE_SIZE;
+		const worldHeight = this.terrain.height * TILE_SIZE;
+
+		/** Zoom at which the entire map fits in view; we disallow going past this (stay strictly zoomed in). */
+		const computeFitZoom = (): number => {
+			return Math.max(cam.width / worldWidth, cam.height / worldHeight);
+		};
+
+		const MAX_ZOOM = 2.5;
+		const MIN_ZOOM_MULTIPLIER = 2; // Strictly > 1 so we never show the full map
+
+		cam.setBounds(0, 0, worldWidth, worldHeight);
+
+		const getMinZoom = (): number => computeFitZoom() * MIN_ZOOM_MULTIPLIER;
+		const getMaxZoom = (): number => MAX_ZOOM;
+
+		const applyZoom = (newZoom: number): void => {
+			cam.setZoom(Phaser.Math.Clamp(newZoom, getMinZoom(), getMaxZoom()));
+		};
+
+		applyZoom(getMinZoom());
+
 		this.input.on("wheel", (_pointer: Phaser.Input.Pointer, _go: unknown, _dx: number, dy: number) => {
-			const cam = this.cameras.main;
 			const rate = 1 - dy * 0.001;
-			const newZoom = Phaser.Math.Clamp(cam.zoom * rate, GameScene.MIN_ZOOM, GameScene.MAX_ZOOM);
-			cam.setZoom(newZoom);
+			applyZoom(cam.zoom * rate);
 		});
-	}
 
-	private createUI(): void {
-		const instructions = this.add.text(10, 10, "Left-click: Select | Right-click: Move | Scroll: Zoom", {
-			fontSize: "14px",
-			fontFamily: "Arial",
-			color: "#ffffff",
-			backgroundColor: "#000000",
-			padding: { x: 5, y: 5 },
+		this.scale.on("resize", () => {
+			applyZoom(cam.zoom);
 		});
-		instructions.setDepth(200).setScrollFactor(0);
-
-		this.unitCountText = this.add.text(10, 45, "", {
-			fontSize: "14px",
-			fontFamily: "Arial",
-			color: "#ffffff",
-		});
-		this.unitCountText.setDepth(200).setScrollFactor(0);
-		this.updateUnitCountText();
-	}
-
-	private updateUnitCountText(): void {
-		const player = this.units.filter((u) => u.team === "player").length;
-		const enemy = this.units.filter((u) => u.team === "enemy").length;
-		this.unitCountText.setText(`Your units: ${player}  Enemies: ${enemy}`);
 	}
 
 	private createTerrain(): void {
-		this.cameras.main.setBackgroundColor(0x3d5a3d);
+		const savedMap = this.registry.get('savedMapData') as SavedMapData | undefined;
+		if (savedMap) {
+			this.terrain = TerrainMap.fromData(savedMap);
+			this.registry.remove('savedMapData');
+		} else {
+			// Generate terrain using Tiny Swords-style procedural generation
+			this.terrain = generateTerrain(WORLD_COLS, WORLD_ROWS, {
+				waterRatio: 0.12,
+				elevatedRegions: 4,
+				createLakes: true,
+				createCoast: true,
+				seed: Math.floor(Math.random() * 100000),
+			});
+		}
+
+		if (DEBUG_TERRAIN) {
+			console.log("[DEBUG_TERRAIN] Terrain map:");
+			this.terrain.debugPrint();
+		}
+
+		this.terrainRenderer = new TerrainRenderer(this, this.terrain);
+		this.terrainRenderer.render();
+
+		this.updatePathfindingFromTerrain();
 	}
 
-	/** Place medieval buildings. Uses Building instances with ProductionQueue where applicable. */
+	private updatePathfindingFromTerrain(): void {
+		const rows = this.terrain.height;
+		const cols = this.terrain.width;
+		for (let row = 0; row < rows; row++) {
+			for (let col = 0; col < cols; col++) {
+				const level = this.terrain.getLevel(row, col);
+				if (level === TerrainLevel.WATER) {
+					const x = col * TILE_SIZE + TILE_SIZE / 2;
+					const y = row * TILE_SIZE + TILE_SIZE / 2;
+					this.pathfinding.markBuildingBlocked(x, y, TILE_SIZE, TILE_SIZE);
+				}
+			}
+		}
+	}
+
+	private static readonly BUILDING_DISPLAY: Record<
+		BuildingType,
+		{ textureKey: string; width: number; height: number }
+	> = {
+		castle: { textureKey: "building-castle", width: 160, height: 128 },
+		barracks: { textureKey: "building-barracks", width: 96, height: 128 },
+		archery: { textureKey: "building-archery", width: 96, height: 128 },
+		tower: { textureKey: "building-tower", width: 64, height: 128 },
+		monastery: { textureKey: "building-monastery", width: 96, height: 128 },
+	};
+
+	private spawnEntitiesFromData(
+		entities: NonNullable<SavedMapData["entities"]>,
+	): void {
+		const d = 50;
+		for (const u of entities.units) {
+			const x = this.terrain.toPixelX(u.col) + TILE_SIZE / 2;
+			const y = this.terrain.toPixelY(u.row) + TILE_SIZE / 2;
+			if (this.terrain.getLevel(u.row, u.col) >= TerrainLevel.FLAT) {
+				this.createUnit(x, y, u.type as UnitType, u.team);
+			}
+		}
+		for (const b of entities.buildings) {
+			const type = b.type as BuildingType;
+			const cfg = GameScene.BUILDING_DISPLAY[type];
+			if (!cfg || !this.textures.exists(cfg.textureKey)) continue;
+			const x = this.terrain.toPixelX(b.col) + TILE_SIZE / 2;
+			const y = this.terrain.toPixelY(b.row) + TILE_SIZE / 2;
+			const building = new Building(this, x, y, cfg.textureKey, type, null);
+			building.setDisplaySize(cfg.width, cfg.height).setDepth(d);
+			this.buildings.push(building);
+			this.pathfinding.markBuildingBlocked(x, y, cfg.width, cfg.height);
+		}
+	}
+
+	/** Check if a position is on walkable terrain (not water). */
+	isWalkable(worldX: number, worldY: number): boolean {
+		const col = Math.floor(worldX / TILE_SIZE);
+		const row = Math.floor(worldY / TILE_SIZE);
+		const level = this.terrain?.getLevel(row, col) ?? TerrainLevel.FLAT;
+		return level >= TerrainLevel.FLAT;
+	}
+
+	/** Get terrain level at world position. */
+	getTerrainLevel(worldX: number, worldY: number): TerrainLevel {
+		const col = Math.floor(worldX / TILE_SIZE);
+		const row = Math.floor(worldY / TILE_SIZE);
+		return this.terrain?.getLevel(row, col) ?? TerrainLevel.FLAT;
+	}
+
+	/** Find a valid spawn position on walkable terrain near the given coordinates. */
+	private findValidSpawnPosition(idealX: number, idealY: number, radius = 5): { x: number; y: number } | null {
+		const idealCol = Math.floor(idealX / TILE_SIZE);
+		const idealRow = Math.floor(idealY / TILE_SIZE);
+
+		// Spiral search outward from ideal position
+		for (let r = 0; r <= radius; r++) {
+			for (let dr = -r; dr <= r; dr++) {
+				for (let dc = -r; dc <= r; dc++) {
+					if (Math.abs(dr) !== r && Math.abs(dc) !== r) continue; // Only check perimeter
+					const row = idealRow + dr;
+					const col = idealCol + dc;
+					if (row < 0 || row >= this.terrain.height || col < 0 || col >= this.terrain.width) continue;
+					if (this.terrain.getLevel(row, col) >= TerrainLevel.FLAT) {
+						return {
+							x: col * TILE_SIZE + TILE_SIZE / 2,
+							y: row * TILE_SIZE + TILE_SIZE / 2,
+						};
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	/** Place medieval buildings on valid terrain. */
 	private placeBuildings(): void {
 		const d = 50;
 
-		const castleX = 6 * TILE_SIZE;
-		const castleY = 6 * TILE_SIZE;
-		if (this.textures.exists("building-castle")) {
-			const castle = new Building(this, castleX, castleY, "building-castle", "castle", null);
+		// Find valid positions for buildings (away from water)
+		const castlePos = this.findValidSpawnPosition(6 * TILE_SIZE, 6 * TILE_SIZE, 8);
+		if (castlePos && this.textures.exists("building-castle")) {
+			const castle = new Building(this, castlePos.x, castlePos.y, "building-castle", "castle", null);
 			castle.setDisplaySize(160, 128).setDepth(d);
 			this.buildings.push(castle);
-			this.pathfinding.markBuildingBlocked(castleX, castleY, 160, 128);
+			this.pathfinding.markBuildingBlocked(castlePos.x, castlePos.y, 160, 128);
 		}
 
-		const barX = 2 * TILE_SIZE;
-		const barY = 6 * TILE_SIZE;
-		if (this.textures.exists("building-barracks")) {
+		const barPos = this.findValidSpawnPosition(2 * TILE_SIZE, 6 * TILE_SIZE, 8);
+		if (barPos && this.textures.exists("building-barracks")) {
 			const barQueue = new ProductionQueue(this, this.economy, (type, team) =>
-				this.createUnit(barX, barY + 80, type, team)
+				this.createUnit(barPos.x, barPos.y + 80, type, team),
 			);
-			const bar = new Building(this, barX, barY, "building-barracks", "barracks", barQueue);
+			const bar = new Building(this, barPos.x, barPos.y, "building-barracks", "barracks", barQueue);
 			bar.setDisplaySize(96, 128).setDepth(d);
 			this.buildings.push(bar);
-			this.pathfinding.markBuildingBlocked(barX, barY, 96, 128);
+			this.pathfinding.markBuildingBlocked(barPos.x, barPos.y, 96, 128);
 		}
 
-		const archX = 10 * TILE_SIZE;
-		const archY = 6 * TILE_SIZE;
-		if (this.textures.exists("building-archery")) {
+		const archPos = this.findValidSpawnPosition(10 * TILE_SIZE, 6 * TILE_SIZE, 8);
+		if (archPos && this.textures.exists("building-archery")) {
 			const archQueue = new ProductionQueue(this, this.economy, (type, team) =>
-				this.createUnit(archX, archY + 80, type, team)
+				this.createUnit(archPos.x, archPos.y + 80, type, team),
 			);
-			const arch = new Building(this, archX, archY, "building-archery", "archery", archQueue);
+			const arch = new Building(this, archPos.x, archPos.y, "building-archery", "archery", archQueue);
 			arch.setDisplaySize(96, 128).setDepth(d);
 			this.buildings.push(arch);
-			this.pathfinding.markBuildingBlocked(archX, archY, 96, 128);
+			this.pathfinding.markBuildingBlocked(archPos.x, archPos.y, 96, 128);
 		}
 
-		const towerX = 14 * TILE_SIZE;
-		const towerY = 5 * TILE_SIZE;
-		if (this.textures.exists("building-tower")) {
-			const tower = new Building(this, towerX, towerY, "building-tower", "tower", null);
+		const towerPos = this.findValidSpawnPosition(14 * TILE_SIZE, 5 * TILE_SIZE, 8);
+		if (towerPos && this.textures.exists("building-tower")) {
+			const tower = new Building(this, towerPos.x, towerPos.y, "building-tower", "tower", null);
 			tower.setDisplaySize(64, 128).setDepth(d);
 			this.buildings.push(tower);
-			this.pathfinding.markBuildingBlocked(towerX, towerY, 64, 128);
+			this.pathfinding.markBuildingBlocked(towerPos.x, towerPos.y, 64, 128);
 		}
 	}
 
-	/** Spawn player army. */
+	/** Spawn player army on valid terrain. */
 	private spawnDemoUnits(): void {
 		const cx = 6 * TILE_SIZE;
 		const cy = 9 * TILE_SIZE;
-		this.createUnit(cx - 80, cy, "knight", "player");
-		this.createUnit(cx - 40, cy + 20, "knight", "player");
-		this.createUnit(cx, cy - 20, "footman", "player");
-		this.createUnit(cx + 50, cy, "footman", "player");
-		this.createUnit(cx + 90, cy + 15, "footman", "player");
-		this.createUnit(cx - 60, cy + 70, "archer", "player");
-		this.createUnit(cx + 30, cy + 70, "archer", "player");
-		this.createUnit(cx + 120, cy + 60, "peasant", "player");
-		this.createUnit(cx + 160, cy + 80, "peasant", "player");
+
+		const spawnUnit = (offsetX: number, offsetY: number, type: UnitType): void => {
+			const pos = this.findValidSpawnPosition(cx + offsetX, cy + offsetY, 5);
+			if (pos) this.createUnit(pos.x, pos.y, type, "player");
+		};
+
+		spawnUnit(-80, 0, "knight");
+		spawnUnit(-40, 20, "knight");
+		spawnUnit(0, -20, "footman");
+		spawnUnit(50, 0, "footman");
+		spawnUnit(90, 15, "footman");
+		spawnUnit(-60, 70, "archer");
+		spawnUnit(30, 70, "archer");
+		spawnUnit(120, 60, "peasant");
+		spawnUnit(160, 80, "peasant");
 	}
 
-	/** Spawn enemy units. */
+	/** Spawn enemy units on valid terrain (opposite side of map). */
 	private spawnEnemyUnits(): void {
-		const ex = 20 * TILE_SIZE;
-		const ey = 8 * TILE_SIZE;
-		this.createUnit(ex, ey, "knight", "enemy");
-		this.createUnit(ex + 60, ey + 30, "knight", "enemy");
-		this.createUnit(ex + 120, ey - 20, "footman", "enemy");
-		this.createUnit(ex + 180, ey + 10, "footman", "enemy");
-		this.createUnit(ex + 80, ey + 80, "archer", "enemy");
+		const ex = (this.terrain.width - 15) * TILE_SIZE;
+		const ey = (this.terrain.height / 2) * TILE_SIZE;
+
+		const spawnUnit = (offsetX: number, offsetY: number, type: UnitType): void => {
+			const pos = this.findValidSpawnPosition(ex + offsetX, ey + offsetY, 8);
+			if (pos) this.createUnit(pos.x, pos.y, type, "enemy");
+		};
+
+		spawnUnit(0, 0, "knight");
+		spawnUnit(60, 30, "knight");
+		spawnUnit(120, -20, "footman");
+		spawnUnit(180, 10, "footman");
+		spawnUnit(80, 80, "archer");
 	}
 
 	public createUnit(x: number, y: number, unitType: UnitType = "knight", team: "player" | "enemy" = "player"): Unit {
@@ -166,7 +324,10 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 	/** Get enemy units within a given unit's attack range. */
 	getEnemiesInRange(unit: Unit): Unit[] {
 		return this.units.filter(
-			(u) => u.active && u.team !== unit.team && Phaser.Math.Distance.Between(unit.x, unit.y, u.x, u.y) <= unit.getAttackRange()
+			(u) =>
+				u.active &&
+				u.team !== unit.team &&
+				Phaser.Math.Distance.Between(unit.x, unit.y, u.x, u.y) <= unit.getAttackRange(),
 		);
 	}
 
@@ -219,13 +380,50 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 	}
 
 	private setupInput(): void {
+		this.input.mouse?.disableContextMenu();
+		const canvas = this.sys.game.canvas;
+		if (canvas) {
+			canvas.addEventListener("contextmenu", (e: MouseEvent) => {
+				e.preventDefault();
+				this.onRightClick(canvas, e);
+			});
+		}
+
+		const keyboard = this.input.keyboard;
+		if (keyboard) {
+			this.cursorKeys = keyboard.createCursorKeys();
+			this.wasdKeys = keyboard.addKeys("W,A,S,D") as {
+				W: Phaser.Input.Keyboard.Key;
+				A: Phaser.Input.Keyboard.Key;
+				S: Phaser.Input.Keyboard.Key;
+				D: Phaser.Input.Keyboard.Key;
+			};
+		}
+
 		this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
 			if (pointer.leftButtonDown()) {
-				this.startSelection(pointer);
+				if (this.buildMode) {
+					this.placeBuilding(pointer.worldX, pointer.worldY);
+				} else {
+					this.startSelection(pointer);
+				}
+			}
+
+			const isRightClick = pointer.button === 2 || pointer.rightButtonDown() || (pointer.buttons & 2) !== 0;
+			if (isRightClick) {
+				if (this.buildMode) {
+					this.cancelBuildMode();
+				} else {
+					this.tryMoveSelectedUnitsTo(pointer.worldX, pointer.worldY);
+				}
 			}
 		});
 
 		this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+			if (this.buildMode && this.buildPreview) {
+				this.buildPreview.setPosition(pointer.worldX, pointer.worldY);
+				this.updateBuildPreviewValidity(pointer.worldX, pointer.worldY);
+			}
 			if (this.isSelecting && pointer.leftButtonDown()) {
 				this.updateSelectionBox(pointer);
 			}
@@ -233,23 +431,153 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 
 		this.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
 			if (pointer.leftButtonReleased()) {
-				this.endSelection(pointer);
+				if (!this.buildMode) {
+					this.endSelection(pointer);
+				}
 			}
 		});
+	}
 
-		this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-			const isRight = pointer.rightButtonDown() || pointer.button === 2;
-			if (isRight) {
-				this.moveSelectedUnits(pointer.worldX, pointer.worldY);
+	private bindEvents(): void {
+		// Listen for unit-action events from HUDScene
+		this.events.on("unit-action", (data: { unit: Unit; action: string }) => {
+			switch (data.action) {
+				case "build":
+					this.enterBuildMode(data.unit);
+					break;
+				case "stop":
+					data.unit.setChaseTarget(null);
+					data.unit.setWaypoints([]);
+					break;
+				case "attack":
+					// Attack nearest enemy — unit combat loop handles this automatically
+					break;
+				case "patrol":
+				case "harvest":
+				case "move":
+					// Patrol/harvest/move require a target point — handled via right-click or future UI
+					break;
 			}
 		});
+		// Listen for building-type-selected events from HUDScene
+		this.events.on("building-type-selected", (buildingType: string) => {
+			this.selectedBuildingType = buildingType;
+			if (this.buildPreview && this.textures.exists(buildingType)) {
+				this.buildPreview.setTexture(buildingType);
+			}
+		});
+	}
 
-		this.input.mouse?.disableContextMenu();
-		// Ensure context menu is blocked so right-click reaches the game (belt-and-suspenders with index.html)
-		const canvas = this.sys.game.canvas;
-		if (canvas) {
-			canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+	private enterBuildMode(unit: Unit): void {
+		this.buildMode = true;
+		this.buildModeWorker = unit;
+		this.selectedBuildingType = "building-barracks"; // Default building type
+
+		// Notify HUDScene to show building type panel
+		this.events.emit("build-mode-entered");
+
+		// Create preview sprite
+		if (this.textures.exists(this.selectedBuildingType)) {
+			this.buildPreview = this.add.sprite(0, 0, this.selectedBuildingType);
+			this.buildPreview.setAlpha(0.6).setDepth(200);
+			this.buildPreview.setDisplaySize(96, 128);
+			this.updateBuildPreviewValidity(0, 0);
 		}
+	}
+
+	private cancelBuildMode(): void {
+		this.buildMode = false;
+		this.buildModeWorker = null;
+		if (this.buildPreview) {
+			this.buildPreview.destroy();
+			this.buildPreview = null;
+		}
+		this.selectedBuildingType = null;
+		this.events.emit("build-mode-exited");
+	}
+
+	private updateBuildPreviewValidity(x: number, y: number): void {
+		if (!this.buildPreview) return;
+
+		const isValid = this.isValidBuildLocation(x, y);
+		if (isValid) {
+			this.buildPreview.setTint(0x00ff00); // Green for valid
+		} else {
+			this.buildPreview.setTint(0xff0000); // Red for invalid
+		}
+	}
+
+	private isValidBuildLocation(x: number, y: number): boolean {
+		const buildingWidth = 96;
+		const buildingHeight = 128;
+		const worldW = this.terrain.width * TILE_SIZE;
+		const worldH = this.terrain.height * TILE_SIZE;
+		if (
+			x < buildingWidth / 2 ||
+			x > worldW - buildingWidth / 2 ||
+			y < buildingHeight / 2 ||
+			y > worldH - buildingHeight / 2
+		) {
+			return false;
+		}
+
+		// Check terrain is walkable (not water)
+		if (!this.isWalkable(x, y)) return false;
+
+		// Check if overlapping with existing buildings
+		const overlapsBuilding = this.buildings.some((b) => {
+			const dist = Phaser.Math.Distance.Between(x, y, b.x, b.y);
+			return dist < 100; // Minimum spacing
+		});
+		if (overlapsBuilding) return false;
+
+		// Check if overlapping with units
+		const overlapsUnit = this.units.some((u) => {
+			const dist = Phaser.Math.Distance.Between(x, y, u.x, u.y);
+			return dist < 80; // Minimum spacing from units
+		});
+		if (overlapsUnit) return false;
+
+		return true;
+	}
+
+	private placeBuilding(x: number, y: number): void {
+		if (!this.buildMode || !this.selectedBuildingType) return;
+		if (!this.isValidBuildLocation(x, y)) return;
+
+		const worker = this.buildModeWorker;
+		if (!worker || !worker.active) {
+			this.cancelBuildMode();
+			return;
+		}
+
+		if (!this.textures.exists(this.selectedBuildingType)) return;
+
+		const buildingType = this.selectedBuildingType.replace(/^building-/, "") as BuildingType;
+		const building = new Building(this, x, y, this.selectedBuildingType, buildingType, null);
+		building.setDisplaySize(96, 128).setDepth(50).setAlpha(0.5);
+		this.buildings.push(building);
+		// Pathfinding blocked only when construction completes
+
+		const progressBar = this.add.graphics();
+		progressBar.setDepth(51);
+
+		this.buildingUnderConstruction = {
+			building,
+			worker,
+			progress: 0,
+			duration: GameScene.BUILD_DURATION_MS,
+			progressBar,
+		};
+
+		const path = this.pathfinding.findPathSmooth(worker.x, worker.y, x, y);
+		if (path.length > 0) {
+			worker.setWaypoints(path);
+		} else {
+			worker.commandMove(x, y);
+		}
+
+		this.cancelBuildMode();
 	}
 
 	private startSelection(pointer: Phaser.Input.Pointer): void {
@@ -318,6 +646,26 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 		}
 	}
 
+	/** Called from contextmenu (fallback when pointerdown doesn't fire for right-click). */
+	private onRightClick(canvas: HTMLCanvasElement, e: MouseEvent): void {
+		const rect = canvas.getBoundingClientRect();
+		const gameX = ((e.clientX - rect.left) / rect.width) * this.scale.width;
+		const gameY = ((e.clientY - rect.top) / rect.height) * this.scale.height;
+		const world = this.cameras.main.getWorldPoint(gameX, gameY);
+		this.tryMoveSelectedUnitsTo(world.x, world.y);
+	}
+
+	private tryMoveSelectedUnitsTo(worldX: number, worldY: number): void {
+		if (this.buildMode) {
+			this.cancelBuildMode();
+			return;
+		}
+		const playerUnits = this.selectedUnits.filter((u) => u.team === "player" && u.active);
+		if (playerUnits.length > 0) {
+			this.moveSelectedUnits(worldX, worldY);
+		}
+	}
+
 	private getUnitAtPosition(x: number, y: number): Unit | null {
 		for (const unit of this.units) {
 			if (Phaser.Math.Distance.Between(x, y, unit.x, unit.y) < 45) {
@@ -328,16 +676,20 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 	}
 
 	private moveSelectedUnits(targetX: number, targetY: number): void {
-		const spacing = TILE_SIZE;
-		const unitsPerRow = Math.ceil(Math.sqrt(this.selectedUnits.length));
-		this.selectedUnits = this.selectedUnits.filter((u) => u.team === "player");
+		// Snapshot to prevent mid-loop mutation if a unit dies or deselects
+		const units = [...this.selectedUnits].filter((u) => u.team === "player" && u.active);
+		if (units.length === 0) return;
 
-		this.selectedUnits.forEach((unit, index) => {
+		const spacing = TILE_SIZE;
+		const unitsPerRow = Math.ceil(Math.sqrt(units.length));
+		const totalRows = Math.ceil(units.length / unitsPerRow);
+
+		units.forEach((unit, index) => {
 			const row = Math.floor(index / unitsPerRow);
 			const col = index % unitsPerRow;
 
 			const offsetX = (col - (unitsPerRow - 1) / 2) * spacing;
-			const offsetY = (row - (Math.ceil(this.selectedUnits.length / unitsPerRow) - 1) / 2) * spacing;
+			const offsetY = (row - (totalRows - 1) / 2) * spacing;
 
 			const destX = targetX + offsetX;
 			const destY = targetY + offsetY;
@@ -360,10 +712,103 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 	update(_time: number, delta: number): void {
 		this.economy.update(delta);
 		this.buildings.forEach((b) => b.getQueue()?.update(delta));
+		this.updateBuildingUnderConstruction(delta);
 
+		this.updateEdgePan(delta);
+		this.updateKeyboardPan(delta);
 		this.runEnemyAI();
 		this.runCombat();
-		this.updateUnitCountText();
+	}
+
+	private updateEdgePan(delta: number): void {
+		const pointer = this.input.activePointer;
+		const cam = this.cameras.main;
+		const worldWidth = this.terrain.width * TILE_SIZE;
+		const worldHeight = this.terrain.height * TILE_SIZE;
+		const visibleW = cam.width / cam.zoom;
+		const visibleH = cam.height / cam.zoom;
+		const maxScrollX = Math.max(0, worldWidth - visibleW);
+		const maxScrollY = Math.max(0, worldHeight - visibleH);
+
+		const move = (delta / 1000) * EDGE_PAN_SPEED;
+		let dx = 0;
+		let dy = 0;
+		if (pointer.x < EDGE_PAN_MARGIN) dx = -move;
+		else if (pointer.x > cam.width - EDGE_PAN_MARGIN) dx = move;
+		if (pointer.y < EDGE_PAN_MARGIN) dy = -move;
+		else if (pointer.y > cam.height - EDGE_PAN_MARGIN) dy = move;
+
+		if (dx !== 0 || dy !== 0) {
+			cam.setScroll(
+				Phaser.Math.Clamp(cam.scrollX + dx, 0, maxScrollX),
+				Phaser.Math.Clamp(cam.scrollY + dy, 0, maxScrollY),
+			);
+		}
+	}
+
+	private updateKeyboardPan(delta: number): void {
+		if (!this.cursorKeys || !this.wasdKeys) return;
+
+		const cam = this.cameras.main;
+		const worldWidth = this.terrain.width * TILE_SIZE;
+		const worldHeight = this.terrain.height * TILE_SIZE;
+		const visibleW = cam.width / cam.zoom;
+		const visibleH = cam.height / cam.zoom;
+		const maxScrollX = Math.max(0, worldWidth - visibleW);
+		const maxScrollY = Math.max(0, worldHeight - visibleH);
+
+		const move = (delta / 1000) * KEYBOARD_PAN_SPEED;
+		let dx = 0;
+		let dy = 0;
+		if (this.cursorKeys.left?.isDown || this.wasdKeys.A.isDown) dx = -move;
+		else if (this.cursorKeys.right?.isDown || this.wasdKeys.D.isDown) dx = move;
+		if (this.cursorKeys.up?.isDown || this.wasdKeys.W.isDown) dy = -move;
+		else if (this.cursorKeys.down?.isDown || this.wasdKeys.S.isDown) dy = move;
+
+		if (dx !== 0 || dy !== 0) {
+			cam.setScroll(
+				Phaser.Math.Clamp(cam.scrollX + dx, 0, maxScrollX),
+				Phaser.Math.Clamp(cam.scrollY + dy, 0, maxScrollY),
+			);
+		}
+	}
+
+	private updateBuildingUnderConstruction(delta: number): void {
+		const uc = this.buildingUnderConstruction;
+		if (!uc) return;
+
+		const { building, worker, progressBar } = uc;
+		if (!worker.active) {
+			progressBar.destroy();
+			this.buildingUnderConstruction = null;
+			building.destroy();
+			return;
+		}
+
+		const ratio = Math.min(1, uc.progress / uc.duration);
+		const barW = 80;
+		const barH = 8;
+		progressBar.setPosition(building.x, building.y - 80);
+		progressBar.clear();
+		progressBar.fillStyle(0x333333, 0.9);
+		progressBar.fillRect(-barW / 2, 0, barW, barH);
+		progressBar.fillStyle(0x44aa44, 1);
+		progressBar.fillRect(-barW / 2, 0, barW * ratio, barH);
+
+		const dist = Phaser.Math.Distance.Between(worker.x, worker.y, building.x, building.y);
+		if (dist <= GameScene.BUILD_SITE_RADIUS) {
+			uc.progress += delta * 1000;
+			worker.playBuildAnimation();
+			if (uc.progress >= uc.duration) {
+				progressBar.destroy();
+				building.setAlpha(1);
+				this.pathfinding.markBuildingBlocked(building.x, building.y, 96, 128);
+				worker.stopBuildAnimation();
+				this.buildingUnderConstruction = null;
+			}
+		} else {
+			worker.stopBuildAnimation();
+		}
 	}
 
 	private runEnemyAI(): void {
@@ -372,20 +817,43 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 
 		this.units.forEach((unit) => {
 			if (!unit.active || unit.team !== "enemy") return;
-			if (unit.hasChaseTarget()) return;
 
+			// Find closest player unit
 			const closest = playerUnits.reduce((a, b) =>
-				Phaser.Math.Distance.Between(unit.x, unit.y, a.x, a.y) <
-				Phaser.Math.Distance.Between(unit.x, unit.y, b.x, b.y)
+				Phaser.Math.Distance.Between(unit.x, unit.y, a.x, a.y) < Phaser.Math.Distance.Between(unit.x, unit.y, b.x, b.y)
 					? a
-					: b
+					: b,
 			);
 
 			const dist = Phaser.Math.Distance.Between(unit.x, unit.y, closest.x, closest.y);
+
 			if (dist <= unit.getAttackRange()) {
 				// Already in range — combat loop handles attack
+				// Clear chase target if in range
+				if (unit.hasChaseTarget()) {
+					unit.setChaseTarget(null);
+				}
 			} else if (dist <= DETECTION_RANGE) {
-				unit.setChaseTarget(closest);
+				// Aggression triggered - use pathfinding for movement
+				// Use pathfinding to set waypoints for proper pathfinding behavior
+				const path = this.pathfinding.findPathSmooth(unit.x, unit.y, closest.x, closest.y);
+				if (path && path.length > 0) {
+					// Clear chase target when using waypoints (setWaypoints doesn't clear it automatically)
+					if (unit.hasChaseTarget()) {
+						unit.setChaseTarget(null);
+					}
+					unit.setWaypoints(path);
+				} else {
+					// Fallback: if pathfinding returns empty path, use chase target for direct movement
+					if (!unit.hasChaseTarget()) {
+						unit.setChaseTarget(closest);
+					}
+				}
+			} else {
+				// Out of detection range, clear chase target
+				if (unit.hasChaseTarget()) {
+					unit.setChaseTarget(null);
+				}
 			}
 		});
 	}
@@ -396,10 +864,9 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 			const enemies = this.getEnemiesInRange(unit);
 			if (enemies.length === 0) return;
 			const closest = enemies.reduce((a, b) =>
-				Phaser.Math.Distance.Between(unit.x, unit.y, a.x, a.y) <
-				Phaser.Math.Distance.Between(unit.x, unit.y, b.x, b.y)
+				Phaser.Math.Distance.Between(unit.x, unit.y, a.x, a.y) < Phaser.Math.Distance.Between(unit.x, unit.y, b.x, b.y)
 					? a
-					: b
+					: b,
 			);
 			unit.attack(closest);
 		});
