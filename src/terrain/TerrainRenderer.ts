@@ -11,15 +11,13 @@
 
 import Phaser from 'phaser';
 import { TerrainMap } from './TerrainMap';
-import { TILE_SIZE, TerrainLevel, getTerrainYOffset, N, E, S, W } from './TerrainTypes';
+import { TILE_SIZE, TerrainLevel, getTerrainYOffset, isElevated, N, E, S, W } from './TerrainTypes';
 import {
   FLAT,
   ELEVATED_TOP,
   CLIFF,
-  RAMP,
   TilePosition,
   determineTilePosition,
-  determineRampPositionFromElevation,
   getRampFrame,
 } from './TinySwordsTiles';
 
@@ -230,21 +228,17 @@ export class TerrainRenderer {
     const tilesetKey = 'terrain-tileset1';
     if (!this.scene.textures.exists(tilesetKey)) return;
 
-    const isHigh = (level: TerrainLevel) =>
-      level === TerrainLevel.ELEVATED_1 || level === TerrainLevel.ELEVATED_2;
-
     for (let row = 0; row < height; row++) {
       for (let col = 0; col < width; col++) {
         if (this.map.getLevel(row, col) !== TerrainLevel.RAMP) continue;
 
         const x = this.map.toPixelX(col);
         const y = this.map.toPixelY(row);
-        const highN = isHigh(this.map.getLevel(row - 1, col));
-        const highE = isHigh(this.map.getLevel(row, col + 1));
-        const highS = isHigh(this.map.getLevel(row + 1, col));
-        const highW = isHigh(this.map.getLevel(row, col - 1));
-        const position = determineRampPositionFromElevation(highN, highE, highS, highW);
-        const frame = getRampFrame(position);
+        const highN = isElevated(this.map.getLevel(row - 1, col));
+        const highE = isElevated(this.map.getLevel(row, col + 1));
+        const highS = isElevated(this.map.getLevel(row + 1, col));
+        const highW = isElevated(this.map.getLevel(row, col - 1));
+        const frame = getRampFrame(highN, highE, highS, highW);
         const tile = this.scene.add.sprite(x, y, tilesetKey, frame);
         tile.setOrigin(0, 0).setDepth(DEPTH.RAMP_GROUND);
         this.container!.add(tile);
@@ -290,7 +284,7 @@ export class TerrainRenderer {
       for (let row = 0; row < height; row++) {
         for (let col = 0; col < width; col++) {
           const cellLevel = this.map.getLevel(row, col);
-          if (cellLevel < level) continue;
+          if (!isElevated(cellLevel) || cellLevel < level) continue;
 
           const x = this.map.toPixelX(col);
           const y = this.map.toPixelY(row) + getTerrainYOffset(level);
@@ -332,10 +326,11 @@ export class TerrainRenderer {
    * Get the correct elevated surface frame based on neighboring tiles.
    */
   private getElevatedFrame(row: number, col: number, level: TerrainLevel): number {
-    const hasN = this.map.getLevel(row - 1, col) >= level;
-    const hasE = this.map.getLevel(row, col + 1) >= level;
-    const hasS = this.map.getLevel(row + 1, col) >= level;
-    const hasW = this.map.getLevel(row, col - 1) >= level;
+    const atLevel = (l: TerrainLevel): boolean => isElevated(l) && l >= level;
+    const hasN = atLevel(this.map.getLevel(row - 1, col));
+    const hasE = atLevel(this.map.getLevel(row, col + 1));
+    const hasS = atLevel(this.map.getLevel(row + 1, col));
+    const hasW = atLevel(this.map.getLevel(row, col - 1));
 
     const position = determineTilePosition(hasN, hasE, hasS, hasW);
     return this.elevatedPositionToFrame(position);
@@ -371,20 +366,19 @@ export class TerrainRenderer {
     hasTexture: boolean
   ): void {
     const southLevel = this.map.getLevel(row + 1, col);
-    if (southLevel >= level) return; // No cliff needed
+    if (isElevated(southLevel) && southLevel >= level) return;
 
     const x = this.map.toPixelX(col);
     const cliffY = this.map.toPixelY(row + 1);
 
     if (hasTexture) {
-      // Determine cliff position
-      const hasW = this.map.getLevel(row, col - 1) >= level;
-      const hasE = this.map.getLevel(row, col + 1) >= level;
+      const elevW = isElevated(this.map.getLevel(row, col - 1)) && this.map.getLevel(row, col - 1) >= level;
+      const elevE = isElevated(this.map.getLevel(row, col + 1)) && this.map.getLevel(row, col + 1) >= level;
 
       let cliffFrame: number;
-      if (!hasW && hasE) cliffFrame = CLIFF.LEFT;
-      else if (hasW && !hasE) cliffFrame = CLIFF.RIGHT;
-      else cliffFrame = CLIFF.CENTER;
+      if (!elevW && elevE) cliffFrame = CLIFF.TOP_LEFT;
+      else if (elevW && !elevE) cliffFrame = CLIFF.TOP_RIGHT;
+      else cliffFrame = CLIFF.TOP;
 
       const cliff = this.scene.add.sprite(x, cliffY, tilesetKey, cliffFrame);
       cliff.setOrigin(0, 0).setDepth(depth);
@@ -407,7 +401,7 @@ export class TerrainRenderer {
    */
   private renderShadow(row: number, col: number, level: TerrainLevel, depth: number): void {
     const southLevel = this.map.getLevel(row + 1, col);
-    if (southLevel >= level) return;
+    if (isElevated(southLevel) && southLevel >= level) return;
 
     const x = this.map.toPixelX(col);
     const shadowY = this.map.toPixelY(row + 1);

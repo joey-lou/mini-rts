@@ -18,6 +18,7 @@ import {
   FLAT,
   ELEVATED_TOP,
   CLIFF,
+  RAMP,
   TilePosition,
   getFlatFrame,
   getElevatedTopFrame,
@@ -75,6 +76,7 @@ export class TileTestScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-THREE', () => this.switchTest(3, instructions));
     this.input.keyboard?.on('keydown-FOUR', () => this.switchTest(4, instructions));
     this.input.keyboard?.on('keydown-FIVE', () => this.switchTest(5, instructions));
+    this.input.keyboard?.on('keydown-SIX', () => this.switchTest(6, instructions));
     this.input.keyboard?.on('keydown-ESC', () => this.scene.start('MenuScene'));
 
     // Camera
@@ -96,7 +98,7 @@ export class TileTestScene extends Phaser.Scene {
   }
 
   private updateInstructions(text: Phaser.GameObjects.Text): void {
-    text.setText(`Test ${this.currentTest} | Keys: 1-5 switch tests | Arrow keys pan | Scroll zoom | ESC menu`);
+    text.setText(`Test ${this.currentTest} | Keys: 1-6 switch tests | Arrow keys pan | Scroll zoom | ESC menu`);
   }
 
   private switchTest(testNum: number, instructions: Phaser.GameObjects.Text): void {
@@ -121,6 +123,7 @@ export class TileTestScene extends Phaser.Scene {
       case 3: this.renderTest3_ElevatedPlatform(); break;
       case 4: this.renderTest4_MixedTerrain(); break;
       case 5: this.renderTest5_TilesetReference(); break;
+      case 6: this.renderTest6_RampStairs(); break;
     }
   }
 
@@ -429,6 +432,105 @@ export class TileTestScene extends Phaser.Scene {
       fontSize: '12px',
       color: '#aaaaaa',
     }).setDepth(DEPTH.UI);
+  }
+
+  /**
+   * Test 6: Ramp/stair tiles between flat and elevated terrain.
+   * Shows individual ramp frames and a composed transition scene.
+   */
+  private renderTest6_RampStairs(): void {
+    const startX = 50;
+    const startY = 100;
+    const tilesetKey = 'terrain-tileset1';
+
+    if (!this.textures.exists(tilesetKey)) {
+      this.addLabel(startX, startY, 'ERROR: Tileset not loaded!');
+      return;
+    }
+
+    this.addLabel(startX, startY - 40, 'Test 6: Ramp/Stair Tiles');
+
+    // Section A: Show all candidate ramp frames individually
+    this.addLabel(startX, startY, 'Row 4-5 left-section frames (potential ramp/strip tiles):');
+
+    const candidateFrames = [36, 37, 38, 39, 45, 46, 47, 48];
+    const labels = ['36 strip-top', '37 strip-v', '38 stair-R', '39 stair-L',
+                     '45 strip-bot', '46', '47 stair-R2', '48 stair-L2'];
+    candidateFrames.forEach((frame, i) => {
+      const x = startX + (i % 4) * (TILE_SIZE + 40);
+      const y = startY + 20 + Math.floor(i / 4) * (TILE_SIZE + 30);
+      this.placeTile(x, y, frame, 5);
+      this.add.text(x, y + TILE_SIZE + 2, labels[i], {
+        fontSize: '10px', color: '#ffff00',
+      }).setDepth(DEPTH.UI);
+    });
+
+    // Section B: Composed scene — flat island with elevated platform and ramp transitions
+    const compX = startX;
+    const compY = startY + 220;
+    this.addLabel(compX, compY - 20, 'Composed: Flat ground + Elevated platform + Ramp transitions');
+
+    // Flat ground base (8 wide × 6 tall)
+    const baseCols = 8;
+    const baseRows = 6;
+    for (let row = 0; row < baseRows; row++) {
+      for (let col = 0; col < baseCols; col++) {
+        const hasN = row > 0;
+        const hasE = col < baseCols - 1;
+        const hasS = row < baseRows - 1;
+        const hasW = col > 0;
+        const pos = determineTilePosition(hasN, hasE, hasS, hasW);
+        const frame = getFlatFrame(pos);
+        this.placeTile(compX + col * TILE_SIZE, compY + row * TILE_SIZE, frame, DEPTH.FLAT);
+      }
+    }
+
+    // Elevated platform (3×2) on top-right area of flat base
+    const elevOffX = 4;
+    const elevOffY = 1;
+    const elevCols = 3;
+    const elevRows = 2;
+    for (let row = 0; row < elevRows; row++) {
+      for (let col = 0; col < elevCols; col++) {
+        const hasN = row > 0;
+        const hasE = col < elevCols - 1;
+        const hasS = row < elevRows - 1;
+        const hasW = col > 0;
+        const pos = determineTilePosition(hasN, hasE, hasS, hasW);
+        const eFrame = getElevatedTopFrame(pos);
+        const x = compX + (elevOffX + col) * TILE_SIZE;
+        const y = compY + (elevOffY + row) * TILE_SIZE;
+        this.placeTile(x, y, eFrame, DEPTH.ELEVATED);
+      }
+    }
+
+    // Cliff faces below elevated platform
+    const cliffRow = elevOffY + elevRows;
+    for (let col = 0; col < elevCols; col++) {
+      let cliffFrame: number = CLIFF.TOP;
+      if (col === 0) cliffFrame = CLIFF.TOP_LEFT;
+      else if (col === elevCols - 1) cliffFrame = CLIFF.TOP_RIGHT;
+      const x = compX + (elevOffX + col) * TILE_SIZE;
+      const y = compY + cliffRow * TILE_SIZE;
+      this.placeTile(x, y, cliffFrame, DEPTH.CLIFF);
+    }
+
+    // Place ramp tiles at the transition points
+    // Ramp to the left of elevated platform (going from flat to elevated)
+    const rampX = compX + (elevOffX - 1) * TILE_SIZE;
+    const rampY1 = compY + elevOffY * TILE_SIZE;
+    const rampY2 = compY + (elevOffY + 1) * TILE_SIZE;
+    this.placeTile(rampX, rampY1, RAMP.STAIR_RIGHT, DEPTH.ELEVATED - 1);
+    this.addFrameLabel(rampX, rampY1, RAMP.STAIR_RIGHT);
+    this.placeTile(rampX, rampY2, RAMP.STAIR_RIGHT, DEPTH.ELEVATED - 1);
+
+    // Ramp below the elevated platform
+    const rampBelow = compY + (cliffRow + 1) * TILE_SIZE;
+    if (cliffRow + 1 < baseRows) {
+      const rx = compX + (elevOffX + 1) * TILE_SIZE;
+      this.placeTile(rx, rampBelow - TILE_SIZE, RAMP.STAIR_LEFT, DEPTH.ELEVATED - 1);
+      this.addFrameLabel(rx, rampBelow - TILE_SIZE, RAMP.STAIR_LEFT);
+    }
   }
 
   /**
