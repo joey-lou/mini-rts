@@ -177,7 +177,7 @@ export class TerrainRenderer {
     for (let row = 0; row < height; row++) {
       for (let col = 0; col < width; col++) {
         const level = this.map.getLevel(row, col);
-        if (level < TerrainLevel.FLAT || level === TerrainLevel.RAMP) continue;
+        if (level < TerrainLevel.FLAT) continue;
 
         const x = this.map.toPixelX(col);
         const y = this.map.toPixelY(row);
@@ -238,7 +238,7 @@ export class TerrainRenderer {
         if (this.map.getLevel(row, col) !== TerrainLevel.RAMP) continue;
 
         const x = this.map.toPixelX(col);
-        const y = this.map.toPixelY(row) + getTerrainYOffset(TerrainLevel.RAMP);
+        const y = this.map.toPixelY(row);
         const highN = isHigh(this.map.getLevel(row - 1, col));
         const highE = isHigh(this.map.getLevel(row, col + 1));
         const highS = isHigh(this.map.getLevel(row + 1, col));
@@ -258,7 +258,7 @@ export class TerrainRenderer {
     for (let row = 0; row < height; row++) {
       for (let col = 0; col < width; col++) {
         const level = this.map.getLevel(row, col);
-        if (level < TerrainLevel.FLAT || level === TerrainLevel.RAMP) continue;
+        if (level < TerrainLevel.FLAT) continue;
 
         const x = this.map.toPixelX(col);
         const y = this.map.toPixelY(row);

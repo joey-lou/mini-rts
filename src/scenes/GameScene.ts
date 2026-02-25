@@ -709,10 +709,14 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 		this.units.forEach((u) => (u.otherUnits = this.units.filter((o) => o !== u)));
 	}
 
-	update(_time: number, delta: number): void {
+	update(time: number, delta: number): void {
 		this.economy.update(delta);
 		this.buildings.forEach((b) => b.getQueue()?.update(delta));
 		this.updateBuildingUnderConstruction(delta);
+
+		this.units.forEach((u) => {
+			if (u.active) u.update(time, delta);
+		});
 
 		this.updateEdgePan(delta);
 		this.updateKeyboardPan(delta);

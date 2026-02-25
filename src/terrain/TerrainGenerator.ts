@@ -81,6 +81,9 @@ export function generateTerrain(
   // Smooth edges and fix isolated tiles
   smoothTerrain(map);
 
+  // Place ramps at transitions between flat and elevated terrain
+  addRamps(map, rng);
+
   return map;
 }
 
@@ -298,6 +301,43 @@ function smoothTerrain(map: TerrainMap): void {
           }
         }
       }
+    }
+  }
+}
+
+/**
+ * Place ramp tiles at transitions between flat and elevated terrain.
+ * Converts some flat tiles adjacent to elevated terrain into ramps.
+ */
+function addRamps(map: TerrainMap, rng: SeededRandom): void {
+  const { width, height } = map;
+  const isElevated = (level: TerrainLevel): boolean =>
+    level === TerrainLevel.ELEVATED_1 || level === TerrainLevel.ELEVATED_2;
+
+  const candidates: Array<{ r: number; c: number }> = [];
+
+  for (let r = 1; r < height - 1; r++) {
+    for (let c = 1; c < width - 1; c++) {
+      if (map.getLevel(r, c) !== TerrainLevel.FLAT) continue;
+
+      const nN = map.getLevel(r - 1, c);
+      const nS = map.getLevel(r + 1, c);
+      const nE = map.getLevel(r, c + 1);
+      const nW = map.getLevel(r, c - 1);
+
+      const elevCount = [nN, nS, nE, nW].filter(isElevated).length;
+
+      // Place ramp only when exactly one cardinal neighbor is elevated
+      if (elevCount === 1) {
+        candidates.push({ r, c });
+      }
+    }
+  }
+
+  // Place ramps at ~25% of valid candidates (avoid cluttering)
+  for (const { r, c } of candidates) {
+    if (rng.bool(0.25)) {
+      map.set(r, c, TerrainLevel.RAMP, 0);
     }
   }
 }
