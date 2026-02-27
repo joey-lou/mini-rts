@@ -25,7 +25,8 @@ const SIDEBAR_ID = 'map-editor-sidebar';
 type EditorBrush =
   | { mode: 'terrain'; level: TerrainLevel }
   | { mode: 'unit'; type: SavedUnitType; team: SavedTeam }
-  | { mode: 'building'; type: SavedBuildingType };
+  | { mode: 'building'; type: SavedBuildingType }
+  | { mode: 'freetile'; frame: number; tileset: number };
 
 const UNIT_TEXTURE: Record<SavedUnitType, string> = {
   knight: 'unit-warrior-idle',
@@ -53,6 +54,8 @@ export class MapEditorScene extends Phaser.Scene {
   private sidebarEl!: HTMLElement;
   private editorEntities: NonNullable<SavedMapData['entities']> = { units: [], buildings: [] };
   private entitySprites: Phaser.GameObjects.Sprite[] = [];
+  private freeTiles: Array<{ row: number; col: number; frame: number; tileset: number }> = [];
+  private freeTileSprites: Phaser.GameObjects.Sprite[] = [];
 
   constructor() {
     super({ key: 'MapEditorScene' });
@@ -172,6 +175,61 @@ export class MapEditorScene extends Phaser.Scene {
     });
     this.sidebarEl.appendChild(buildingContainer);
 
+    // Free tile picker — all 54 frames in a 9×6 grid
+    const tilePickerLabel = document.createElement('div');
+    tilePickerLabel.textContent = 'Free Tile (click to select, place on map):';
+    tilePickerLabel.style.fontSize = '14px';
+    tilePickerLabel.style.color = '#ffffff';
+    tilePickerLabel.style.marginTop = '12px';
+    this.sidebarEl.appendChild(tilePickerLabel);
+
+    const FRAME_LABELS: Record<number, string> = {
+      0: 'TL', 1: 'T', 2: 'TR', 3: 'iTL',
+      9: 'L', 10: 'C', 11: 'R', 12: 'iTR',
+      18: 'BL', 19: 'B', 20: 'BR', 21: 'iBL',
+      27: 'sL', 28: 'sC', 29: 'sR', 30: 'iBR',
+      36: 'rA↑', 37: 'rB↑', 38: '?', 39: '?',
+      45: 'rA↓', 46: 'rB↓', 47: '?', 48: '?',
+      5: 'eTL', 6: 'eT', 7: 'eTR', 8: 'e?',
+      14: 'eL', 15: 'eC', 16: 'eR', 17: 'e?',
+      23: 'eBL', 24: 'eB', 25: 'eBR', 26: 'e?',
+      32: 'cTL', 33: 'cT', 34: 'cTR', 35: 'c?',
+      41: 'cL', 42: 'cC', 43: 'cR', 44: 'c?',
+      50: 'cBL', 51: 'cB', 52: 'cBR', 53: 'c?',
+    };
+
+    const tileGrid = document.createElement('div');
+    tileGrid.style.display = 'grid';
+    tileGrid.style.gridTemplateColumns = 'repeat(9, 1fr)';
+    tileGrid.style.gap = '1px';
+    tileGrid.style.background = '#1a1a1a';
+    tileGrid.style.padding = '2px';
+    tileGrid.style.borderRadius = '4px';
+
+    for (let r = 0; r < 6; r++) {
+      for (let c = 0; c < 9; c++) {
+        const frame = c + r * 9;
+        const btn = document.createElement('button');
+        const label = FRAME_LABELS[frame] ?? '';
+        btn.textContent = `${frame}`;
+        btn.title = `Frame ${frame} ${label}`;
+        btn.dataset.brush = `freetile:${frame}:1`;
+        const isSpacer = c === 4;
+        const isLeft = c < 4;
+        const bgColor = isSpacer ? '#111' : isLeft ? '#2a3a2a' : (r < 3 ? '#2a2a3a' : '#2a2a2a');
+        btn.style.cssText = `font-size:9px; padding:2px 0; cursor:pointer; background:${bgColor}; color:#999; border:1px solid #333; min-width:0; text-align:center;`;
+        tileGrid.appendChild(btn);
+      }
+    }
+    this.sidebarEl.appendChild(tileGrid);
+
+    const clearFreeTilesBtn = document.createElement('button');
+    clearFreeTilesBtn.textContent = 'Clear free tiles';
+    clearFreeTilesBtn.dataset.action = 'clear-freetiles';
+    clearFreeTilesBtn.style.cssText =
+      'font-size:12px; padding:6px 10px; cursor:pointer; background:#3a2a2a; color:#cc8888; border:1px solid #4a3232; border-radius:4px; margin-top:4px;';
+    this.sidebarEl.appendChild(clearFreeTilesBtn);
+
     const mapSizeLabel = document.createElement('div');
     mapSizeLabel.textContent = 'Map size:';
     mapSizeLabel.style.fontSize = '16px';
@@ -243,28 +301,28 @@ export class MapEditorScene extends Phaser.Scene {
   }
 
   private updateBrushHighlight(): void {
-    const selectedBgFor = (brushValue: string): string => {
-      if (brushValue === `terrain:${TerrainLevel.ELEVATED_1}`) return '#3a4a2a';
-      if (brushValue === `terrain:${TerrainLevel.ELEVATED_2}`) return '#4a3a4a';
-      return '#2a3a3a';
-    };
-    const toBrushValue = (data: string): string => {
-      if (data.startsWith('terrain:')) return data;
-      if (data.startsWith('unit:')) return data;
-      if (data.startsWith('building:')) return data;
-      return '';
-    };
-    const currentValue =
-      this.brush.mode === 'terrain'
-        ? `terrain:${this.brush.level}`
-        : this.brush.mode === 'unit'
-          ? `unit:${this.brush.type}:${this.brush.team}`
-          : `building:${this.brush.type}`;
+    let currentValue: string;
+    if (this.brush.mode === 'terrain') currentValue = `terrain:${this.brush.level}`;
+    else if (this.brush.mode === 'unit') currentValue = `unit:${this.brush.type}:${this.brush.team}`;
+    else if (this.brush.mode === 'freetile') currentValue = `freetile:${this.brush.frame}:${this.brush.tileset}`;
+    else currentValue = `building:${this.brush.type}`;
+
     this.sidebarEl.querySelectorAll<HTMLButtonElement>('[data-brush]').forEach((btn) => {
-      const brushValue = btn.dataset.brush ? toBrushValue(btn.dataset.brush) : '';
-      const isSelected = brushValue === currentValue;
-      btn.style.background = isSelected ? selectedBgFor(currentValue) : '#2a2a2a';
-      btn.style.color = isSelected ? '#ffff00' : '#aaaaaa';
+      const bv = btn.dataset.brush ?? '';
+      const isSelected = bv === currentValue;
+      if (bv.startsWith('freetile:')) {
+        const c = parseInt(bv.split(':')[1]) % 9;
+        const isSpacer = c === 4;
+        const isLeft = c < 4;
+        const r = Math.floor(parseInt(bv.split(':')[1]) / 9);
+        const defaultBg = isSpacer ? '#111' : isLeft ? '#2a3a2a' : (r < 3 ? '#2a2a3a' : '#2a2a2a');
+        btn.style.background = isSelected ? '#4a4a1a' : defaultBg;
+        btn.style.color = isSelected ? '#ffff00' : '#999';
+        btn.style.borderColor = isSelected ? '#aaaa00' : '#333';
+      } else {
+        btn.style.background = isSelected ? '#2a3a3a' : '#2a2a2a';
+        btn.style.color = isSelected ? '#ffff00' : '#aaaaaa';
+      }
     });
   }
 
@@ -279,6 +337,9 @@ export class MapEditorScene extends Phaser.Scene {
           this.brush = { mode: 'unit', type: type as SavedUnitType, team: team as SavedTeam };
         } else if (data.startsWith('building:')) {
           this.brush = { mode: 'building', type: data.slice(9) as SavedBuildingType };
+        } else if (data.startsWith('freetile:')) {
+          const parts = data.split(':');
+          this.brush = { mode: 'freetile', frame: parseInt(parts[1]), tileset: parseInt(parts[2]) };
         }
         this.updateBrushHighlight();
       });
@@ -287,6 +348,10 @@ export class MapEditorScene extends Phaser.Scene {
     this.sidebarEl.querySelector<HTMLButtonElement>('[data-action="new-map"]')?.addEventListener('click', () => this.createNewMap());
     this.sidebarEl.querySelector<HTMLButtonElement>('[data-action="save"]')?.addEventListener('click', () => this.saveMap());
     this.sidebarEl.querySelector<HTMLButtonElement>('[data-action="exit"]')?.addEventListener('click', () => this.scene.start('MenuScene'));
+    this.sidebarEl.querySelector<HTMLButtonElement>('[data-action="clear-freetiles"]')?.addEventListener('click', () => {
+      this.freeTiles = [];
+      this.refreshFreeTileSprites();
+    });
   }
 
   private createNewMap(): void {
@@ -305,7 +370,9 @@ export class MapEditorScene extends Phaser.Scene {
     this.terrainRenderer = new TerrainRenderer(this, this.map);
     this.terrainRenderer.render();
     this.editorEntities = { units: [], buildings: [] };
+    this.freeTiles = [];
     this.refreshEntitySprites();
+    this.refreshFreeTileSprites();
     this.cameras.main.setBounds(0, 0, w * TILE_SIZE, h * TILE_SIZE);
     this.scale.emit('resize');
   }
@@ -390,11 +457,16 @@ export class MapEditorScene extends Phaser.Scene {
       const row = Math.floor(worldY / TILE_SIZE);
 
       if (pointer.rightButtonDown()) {
+        this.removeFreeTileAt(col, row);
         this.removeEntityAt(worldX, worldY);
         return;
       }
       if (!pointer.leftButtonDown()) return;
 
+      if (this.brush.mode === 'freetile') {
+        this.placeFreeTile(col, row, this.brush.frame, this.brush.tileset);
+        return;
+      }
       if (this.brush.mode === 'terrain') {
         this.isDragging = true;
         this.paintAt(worldX, worldY);
@@ -444,6 +516,34 @@ export class MapEditorScene extends Phaser.Scene {
     this.terrainRenderer.destroy();
     this.terrainRenderer = new TerrainRenderer(this, this.map);
     this.terrainRenderer.render();
+  }
+
+  private placeFreeTile(col: number, row: number, frame: number, tileset: number): void {
+    // Remove existing free tile at this position
+    this.freeTiles = this.freeTiles.filter((t) => !(t.col === col && t.row === row));
+    this.freeTiles.push({ row, col, frame, tileset });
+    this.refreshFreeTileSprites();
+  }
+
+  private removeFreeTileAt(col: number, row: number): void {
+    const before = this.freeTiles.length;
+    this.freeTiles = this.freeTiles.filter((t) => !(t.col === col && t.row === row));
+    if (this.freeTiles.length !== before) this.refreshFreeTileSprites();
+  }
+
+  private refreshFreeTileSprites(): void {
+    this.freeTileSprites.forEach((s) => s.destroy());
+    this.freeTileSprites = [];
+    const tilesets = ['terrain-tileset1', 'terrain-tileset2', 'terrain-tileset3'];
+    for (const t of this.freeTiles) {
+      const key = tilesets[(t.tileset - 1) % tilesets.length];
+      if (!this.textures.exists(key)) continue;
+      const x = t.col * TILE_SIZE;
+      const y = t.row * TILE_SIZE;
+      const sprite = this.add.sprite(x, y, key, t.frame);
+      sprite.setOrigin(0, 0).setDepth(100);
+      this.freeTileSprites.push(sprite);
+    }
   }
 
   private setupCamera(): void {
