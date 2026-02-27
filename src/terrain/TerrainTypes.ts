@@ -40,20 +40,13 @@ export function isGround(level: TerrainLevel): boolean {
   return level !== TerrainLevel.WATER;
 }
 
-/** Y-offset for rendering: 0 = flat, negative = drawn higher on screen. */
-export function getTerrainYOffset(level: TerrainLevel): number {
-  switch (level) {
-    case TerrainLevel.WATER:
-    case TerrainLevel.FLAT:
-    case TerrainLevel.RAMP:
-      return 0;
-    case TerrainLevel.ELEVATED_1:
-      return -HEIGHT_PER_LEVEL;
-    case TerrainLevel.ELEVATED_2:
-      return -2 * HEIGHT_PER_LEVEL;
-    default:
-      return 0;
-  }
+/**
+ * Y-offset for rendering. All tiles render at their grid position (offset 0).
+ * Height illusion is created by compositing cliff body tiles in the row
+ * below the elevated surface, not by shifting tiles vertically.
+ */
+export function getTerrainYOffset(_level: TerrainLevel): number {
+  return 0;
 }
 
 /** 4-bit neighbor bitmask: N=1, E=2, S=4, W=8 */

@@ -443,7 +443,6 @@ export class TileTestScene extends Phaser.Scene {
     const startX = 50;
     const startY = 100;
     const tilesetKey = 'terrain-tileset1';
-    const HEIGHT_OFFSET = 24;
 
     if (!this.textures.exists(tilesetKey)) {
       this.addLabel(startX, startY, 'ERROR: Tileset not loaded!');
@@ -452,28 +451,32 @@ export class TileTestScene extends Phaser.Scene {
 
     this.addLabel(startX, startY - 40, 'Test 6: Elevation Compositing + Stair Pairs');
 
-    // Section A: Cliff body only at south boundary of elevated area
-    this.addLabel(startX, startY, 'A) Cliff body on south-boundary tiles only:');
+    // Section A: Surface at grid pos, cliff in row below (south boundary)
+    this.addLabel(startX, startY, 'A) Surface at grid pos + cliff body in row below:');
     const compY = startY + 20;
-    // Flat ground base
+    // Flat ground base (4 rows)
     for (let r = 0; r < 4; r++) {
       for (let c = 0; c < 3; c++) {
         this.placeTile(startX + c * TILE_SIZE, compY + r * TILE_SIZE, FLAT.CENTER, DEPTH.FLAT);
       }
     }
-    // Top elevated row: surface only (no cliff, interior row)
+    // Row 0: top elevated surface (no cliff — not south boundary)
     for (let c = 0; c < 3; c++) {
       const cx = startX + c * TILE_SIZE;
       const surfF = c === 0 ? ELEVATED_TOP.TOP_LEFT : c === 2 ? ELEVATED_TOP.TOP_RIGHT : ELEVATED_TOP.TOP;
-      this.placeTile(cx, compY - HEIGHT_OFFSET, surfF, DEPTH.ELEVATED);
+      this.placeTile(cx, compY, surfF, DEPTH.ELEVATED);
     }
-    // Bottom elevated row: cliff body + surface (south boundary)
+    // Row 1: bottom elevated surface (south boundary)
+    for (let c = 0; c < 3; c++) {
+      const cx = startX + c * TILE_SIZE;
+      const surfF = c === 0 ? ELEVATED_TOP.BOTTOM_LEFT : c === 2 ? ELEVATED_TOP.BOTTOM_RIGHT : ELEVATED_TOP.BOTTOM;
+      this.placeTile(cx, compY + TILE_SIZE, surfF, DEPTH.ELEVATED);
+    }
+    // Row 2: cliff body (in the row BELOW the south boundary surface)
     for (let c = 0; c < 3; c++) {
       const cx = startX + c * TILE_SIZE;
       const cliffF = c === 0 ? CLIFF.TOP_LEFT : c === 2 ? CLIFF.TOP_RIGHT : CLIFF.TOP;
-      this.placeTile(cx, compY + TILE_SIZE, cliffF, DEPTH.CLIFF);
-      const surfF = c === 0 ? ELEVATED_TOP.BOTTOM_LEFT : c === 2 ? ELEVATED_TOP.BOTTOM_RIGHT : ELEVATED_TOP.BOTTOM;
-      this.placeTile(cx, compY + TILE_SIZE - HEIGHT_OFFSET, surfF, DEPTH.ELEVATED);
+      this.placeTile(cx, compY + TILE_SIZE * 2, cliffF, DEPTH.CLIFF);
     }
 
     // Section B: Show stair pairs
@@ -507,18 +510,17 @@ export class TileTestScene extends Phaser.Scene {
         this.placeTile(sceneX + c * TILE_SIZE, sceneY + r * TILE_SIZE, getFlatFrame(pos), DEPTH.FLAT);
       }
     }
-    // Elevated (2×2): cliff body only on bottom row (south boundary)
+    // Elevated (2×2): surface at grid pos, cliff in row below south boundary
     for (let r = 0; r < 2; r++) {
       for (let c = 0; c < 2; c++) {
         const gx = sceneX + (c + 2) * TILE_SIZE;
         const gy = sceneY + (r + 1) * TILE_SIZE;
-        const isSouthBoundary = r === 1;
-        if (isSouthBoundary) {
-          const cliffF = c === 0 ? CLIFF.TOP_LEFT : CLIFF.TOP_RIGHT;
-          this.placeTile(gx, gy, cliffF, DEPTH.CLIFF);
-        }
         const pos = determineTilePosition(r > 0, c < 1, r < 1, c > 0);
-        this.placeTile(gx, gy - HEIGHT_OFFSET, getElevatedTopFrame(pos), DEPTH.ELEVATED);
+        this.placeTile(gx, gy, getElevatedTopFrame(pos), DEPTH.ELEVATED);
+        if (r === 1) {
+          const cliffF = c === 0 ? CLIFF.TOP_LEFT : CLIFF.TOP_RIGHT;
+          this.placeTile(gx, gy + TILE_SIZE, cliffF, DEPTH.CLIFF);
+        }
       }
     }
     // Stair pair next to elevated

@@ -279,10 +279,9 @@ export class TerrainRenderer {
   }
 
   /**
-   * Render elevated terrain. Every elevated cell gets a surface tile
-   * shifted up by HEIGHT_OFFSET. Only cells at the south boundary
-   * (south neighbor is not elevated at the same level) also get a cliff
-   * body tile at the cell position to show the height drop.
+   * Render elevated terrain. Surface tiles at grid position (no Y offset).
+   * Cliff body tiles placed in the ROW BELOW south-boundary elevated cells
+   * to create the height illusion.
    */
   private renderElevatedTerrain(): void {
     const { width, height } = this.map;
@@ -298,39 +297,36 @@ export class TerrainRenderer {
           if (!isElevated(cellLevel) || cellLevel < level) continue;
 
           const x = this.map.toPixelX(col);
-          const baseY = this.map.toPixelY(row);
-          const surfaceY = baseY + getTerrainYOffset(level);
+          const y = this.map.toPixelY(row);
           const depthCliff = DEPTH.CLIFF_BASE + level * 3;
           const depthElevated = DEPTH.ELEVATED_BASE + level * 3;
 
-          // Cliff body only at the south boundary (height drop visible)
-          const southLevel = this.map.getLevel(row + 1, col);
-          const southIsElevated = isElevated(southLevel) && southLevel >= level;
-          if (!southIsElevated && hasTexture) {
-            const cliffFrame = this.getCliffFrame(row, col, level);
-            const cliff = this.scene.add.sprite(x, baseY, tilesetKey, cliffFrame);
-            cliff.setOrigin(0, 0).setDepth(depthCliff);
-            this.container!.add(cliff);
-          }
-
-          // Elevated surface shifted up
+          // Elevated surface at grid position
           if (hasTexture) {
             const frame = this.getElevatedFrame(row, col, level);
-            const tile = this.scene.add.sprite(x, surfaceY, tilesetKey, frame);
+            const tile = this.scene.add.sprite(x, y, tilesetKey, frame);
             tile.setOrigin(0, 0).setDepth(depthElevated);
             this.container!.add(tile);
           } else {
             const colors = [0x5a8a5a, 0x6a9a6a, 0x7aaa7a];
             const color = colors[(level - 1) % colors.length];
             const rect = this.scene.add.rectangle(
-              x + TILE_SIZE / 2,
-              surfaceY + TILE_SIZE / 2,
-              TILE_SIZE - 2,
-              TILE_SIZE - 2,
-              color
+              x + TILE_SIZE / 2, y + TILE_SIZE / 2,
+              TILE_SIZE - 2, TILE_SIZE - 2, color,
             );
             rect.setDepth(depthElevated);
             this.container!.add(rect);
+          }
+
+          // Cliff body in the ROW BELOW for south-boundary cells
+          const southLevel = this.map.getLevel(row + 1, col);
+          const southIsElevated = isElevated(southLevel) && southLevel >= level;
+          if (!southIsElevated && hasTexture) {
+            const cliffFrame = this.getCliffFrame(row, col, level);
+            const cliffY = this.map.toPixelY(row + 1);
+            const cliff = this.scene.add.sprite(x, cliffY, tilesetKey, cliffFrame);
+            cliff.setOrigin(0, 0).setDepth(depthCliff);
+            this.container!.add(cliff);
           }
         }
       }
