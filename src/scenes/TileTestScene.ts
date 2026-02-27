@@ -452,26 +452,22 @@ export class TileTestScene extends Phaser.Scene {
 
     this.addLabel(startX, startY - 40, 'Test 6: Elevation Compositing + Stair Pairs');
 
-    // Section A: Show how elevated = cliff body (at cell) + surface (shifted up)
-    this.addLabel(startX, startY, 'A) Each elevated cell = cliff body + surface shifted up:');
+    // Section A: Cliff body only at south boundary of elevated area
+    this.addLabel(startX, startY, 'A) Cliff body on south-boundary tiles only:');
     const compY = startY + 20;
-    // Flat ground base (3×3 around the elevated area)
-    for (let r = 0; r < 3; r++) {
+    // Flat ground base
+    for (let r = 0; r < 4; r++) {
       for (let c = 0; c < 3; c++) {
         this.placeTile(startX + c * TILE_SIZE, compY + r * TILE_SIZE, FLAT.CENTER, DEPTH.FLAT);
       }
     }
-    // For each of 3 elevated cells in the top row: cliff body at cell pos, surface shifted up
+    // Top elevated row: surface only (no cliff, interior row)
     for (let c = 0; c < 3; c++) {
       const cx = startX + c * TILE_SIZE;
-      // Cliff body at cell position (stone face visible below surface)
-      const cliffF = c === 0 ? CLIFF.TOP_LEFT : c === 2 ? CLIFF.TOP_RIGHT : CLIFF.TOP;
-      this.placeTile(cx, compY, cliffF, DEPTH.CLIFF);
-      // Elevated surface shifted up
       const surfF = c === 0 ? ELEVATED_TOP.TOP_LEFT : c === 2 ? ELEVATED_TOP.TOP_RIGHT : ELEVATED_TOP.TOP;
       this.placeTile(cx, compY - HEIGHT_OFFSET, surfF, DEPTH.ELEVATED);
     }
-    // Second elevated row
+    // Bottom elevated row: cliff body + surface (south boundary)
     for (let c = 0; c < 3; c++) {
       const cx = startX + c * TILE_SIZE;
       const cliffF = c === 0 ? CLIFF.TOP_LEFT : c === 2 ? CLIFF.TOP_RIGHT : CLIFF.TOP;
@@ -511,13 +507,16 @@ export class TileTestScene extends Phaser.Scene {
         this.placeTile(sceneX + c * TILE_SIZE, sceneY + r * TILE_SIZE, getFlatFrame(pos), DEPTH.FLAT);
       }
     }
-    // Elevated (2×2): cliff body at cell + surface shifted up
+    // Elevated (2×2): cliff body only on bottom row (south boundary)
     for (let r = 0; r < 2; r++) {
       for (let c = 0; c < 2; c++) {
         const gx = sceneX + (c + 2) * TILE_SIZE;
         const gy = sceneY + (r + 1) * TILE_SIZE;
-        const cliffF = c === 0 ? CLIFF.TOP_LEFT : CLIFF.TOP_RIGHT;
-        this.placeTile(gx, gy, cliffF, DEPTH.CLIFF);
+        const isSouthBoundary = r === 1;
+        if (isSouthBoundary) {
+          const cliffF = c === 0 ? CLIFF.TOP_LEFT : CLIFF.TOP_RIGHT;
+          this.placeTile(gx, gy, cliffF, DEPTH.CLIFF);
+        }
         const pos = determineTilePosition(r > 0, c < 1, r < 1, c > 0);
         this.placeTile(gx, gy - HEIGHT_OFFSET, getElevatedTopFrame(pos), DEPTH.ELEVATED);
       }

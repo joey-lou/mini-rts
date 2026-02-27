@@ -279,10 +279,10 @@ export class TerrainRenderer {
   }
 
   /**
-   * Render elevated terrain as composites: each elevated cell gets a
-   * cliff body tile at the cell position + an elevated surface tile
-   * shifted up by HEIGHT_OFFSET. The surface covers the top of the cliff;
-   * the bottom portion of the cliff remains visible as the stone face.
+   * Render elevated terrain. Every elevated cell gets a surface tile
+   * shifted up by HEIGHT_OFFSET. Only cells at the south boundary
+   * (south neighbor is not elevated at the same level) also get a cliff
+   * body tile at the cell position to show the height drop.
    */
   private renderElevatedTerrain(): void {
     const { width, height } = this.map;
@@ -303,15 +303,17 @@ export class TerrainRenderer {
           const depthCliff = DEPTH.CLIFF_BASE + level * 3;
           const depthElevated = DEPTH.ELEVATED_BASE + level * 3;
 
-          // 1. Cliff body at the cell position (stone face below the surface)
-          if (hasTexture) {
+          // Cliff body only at the south boundary (height drop visible)
+          const southLevel = this.map.getLevel(row + 1, col);
+          const southIsElevated = isElevated(southLevel) && southLevel >= level;
+          if (!southIsElevated && hasTexture) {
             const cliffFrame = this.getCliffFrame(row, col, level);
             const cliff = this.scene.add.sprite(x, baseY, tilesetKey, cliffFrame);
             cliff.setOrigin(0, 0).setDepth(depthCliff);
             this.container!.add(cliff);
           }
 
-          // 2. Elevated surface shifted up (grass top covers the cliff's upper portion)
+          // Elevated surface shifted up
           if (hasTexture) {
             const frame = this.getElevatedFrame(row, col, level);
             const tile = this.scene.add.sprite(x, surfaceY, tilesetKey, frame);
