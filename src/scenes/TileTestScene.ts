@@ -452,28 +452,33 @@ export class TileTestScene extends Phaser.Scene {
 
     this.addLabel(startX, startY - 40, 'Test 6: Elevation Compositing + Stair Pairs');
 
-    // Section A: Show how elevated surface + cliff compose
-    this.addLabel(startX, startY, 'A) Elevated = surface tile (shifted up) + cliff tile (below):');
+    // Section A: Show how elevated = cliff body (at cell) + surface (shifted up)
+    this.addLabel(startX, startY, 'A) Each elevated cell = cliff body + surface shifted up:');
     const compY = startY + 20;
-    // Flat ground base
-    this.placeTile(startX, compY, FLAT.CENTER, DEPTH.FLAT);
-    this.placeTile(startX + TILE_SIZE, compY, FLAT.CENTER, DEPTH.FLAT);
-    this.placeTile(startX + TILE_SIZE * 2, compY, FLAT.CENTER, DEPTH.FLAT);
-    this.placeTile(startX, compY + TILE_SIZE, FLAT.CENTER, DEPTH.FLAT);
-    this.placeTile(startX + TILE_SIZE, compY + TILE_SIZE, FLAT.CENTER, DEPTH.FLAT);
-    this.placeTile(startX + TILE_SIZE * 2, compY + TILE_SIZE, FLAT.CENTER, DEPTH.FLAT);
-    // Elevated surface (shifted up by HEIGHT_OFFSET)
-    this.placeTile(startX, compY - HEIGHT_OFFSET, ELEVATED_TOP.TOP_LEFT, DEPTH.ELEVATED);
-    this.placeTile(startX + TILE_SIZE, compY - HEIGHT_OFFSET, ELEVATED_TOP.TOP, DEPTH.ELEVATED);
-    this.placeTile(startX + TILE_SIZE * 2, compY - HEIGHT_OFFSET, ELEVATED_TOP.TOP_RIGHT, DEPTH.ELEVATED);
-    this.placeTile(startX, compY + TILE_SIZE - HEIGHT_OFFSET, ELEVATED_TOP.BOTTOM_LEFT, DEPTH.ELEVATED);
-    this.placeTile(startX + TILE_SIZE, compY + TILE_SIZE - HEIGHT_OFFSET, ELEVATED_TOP.BOTTOM, DEPTH.ELEVATED);
-    this.placeTile(startX + TILE_SIZE * 2, compY + TILE_SIZE - HEIGHT_OFFSET, ELEVATED_TOP.BOTTOM_RIGHT, DEPTH.ELEVATED);
-    // Cliff faces directly below the elevated surface
-    const cliffStartY = compY + TILE_SIZE * 2 - HEIGHT_OFFSET;
-    this.placeTile(startX, cliffStartY, CLIFF.TOP_LEFT, DEPTH.CLIFF);
-    this.placeTile(startX + TILE_SIZE, cliffStartY, CLIFF.TOP, DEPTH.CLIFF);
-    this.placeTile(startX + TILE_SIZE * 2, cliffStartY, CLIFF.TOP_RIGHT, DEPTH.CLIFF);
+    // Flat ground base (3×3 around the elevated area)
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        this.placeTile(startX + c * TILE_SIZE, compY + r * TILE_SIZE, FLAT.CENTER, DEPTH.FLAT);
+      }
+    }
+    // For each of 3 elevated cells in the top row: cliff body at cell pos, surface shifted up
+    for (let c = 0; c < 3; c++) {
+      const cx = startX + c * TILE_SIZE;
+      // Cliff body at cell position (stone face visible below surface)
+      const cliffF = c === 0 ? CLIFF.TOP_LEFT : c === 2 ? CLIFF.TOP_RIGHT : CLIFF.TOP;
+      this.placeTile(cx, compY, cliffF, DEPTH.CLIFF);
+      // Elevated surface shifted up
+      const surfF = c === 0 ? ELEVATED_TOP.TOP_LEFT : c === 2 ? ELEVATED_TOP.TOP_RIGHT : ELEVATED_TOP.TOP;
+      this.placeTile(cx, compY - HEIGHT_OFFSET, surfF, DEPTH.ELEVATED);
+    }
+    // Second elevated row
+    for (let c = 0; c < 3; c++) {
+      const cx = startX + c * TILE_SIZE;
+      const cliffF = c === 0 ? CLIFF.TOP_LEFT : c === 2 ? CLIFF.TOP_RIGHT : CLIFF.TOP;
+      this.placeTile(cx, compY + TILE_SIZE, cliffF, DEPTH.CLIFF);
+      const surfF = c === 0 ? ELEVATED_TOP.BOTTOM_LEFT : c === 2 ? ELEVATED_TOP.BOTTOM_RIGHT : ELEVATED_TOP.BOTTOM;
+      this.placeTile(cx, compY + TILE_SIZE - HEIGHT_OFFSET, surfF, DEPTH.ELEVATED);
+    }
 
     // Section B: Show stair pairs
     const pairY = compY + TILE_SIZE * 3 + 40;
@@ -506,18 +511,17 @@ export class TileTestScene extends Phaser.Scene {
         this.placeTile(sceneX + c * TILE_SIZE, sceneY + r * TILE_SIZE, getFlatFrame(pos), DEPTH.FLAT);
       }
     }
-    // Elevated (2×2) in center, shifted up
+    // Elevated (2×2): cliff body at cell + surface shifted up
     for (let r = 0; r < 2; r++) {
       for (let c = 0; c < 2; c++) {
+        const gx = sceneX + (c + 2) * TILE_SIZE;
+        const gy = sceneY + (r + 1) * TILE_SIZE;
+        const cliffF = c === 0 ? CLIFF.TOP_LEFT : CLIFF.TOP_RIGHT;
+        this.placeTile(gx, gy, cliffF, DEPTH.CLIFF);
         const pos = determineTilePosition(r > 0, c < 1, r < 1, c > 0);
-        const eFrame = getElevatedTopFrame(pos);
-        this.placeTile(sceneX + (c + 2) * TILE_SIZE, sceneY + (r + 1) * TILE_SIZE - HEIGHT_OFFSET, eFrame, DEPTH.ELEVATED);
+        this.placeTile(gx, gy - HEIGHT_OFFSET, getElevatedTopFrame(pos), DEPTH.ELEVATED);
       }
     }
-    // Cliff faces below elevated
-    const cliffY2 = sceneY + 3 * TILE_SIZE - HEIGHT_OFFSET;
-    this.placeTile(sceneX + 2 * TILE_SIZE, cliffY2, CLIFF.TOP_LEFT, DEPTH.CLIFF);
-    this.placeTile(sceneX + 3 * TILE_SIZE, cliffY2, CLIFF.TOP_RIGHT, DEPTH.CLIFF);
     // Stair pair next to elevated
     this.placeTile(sceneX + 1 * TILE_SIZE, sceneY + 1 * TILE_SIZE, RAMP.A_UPPER, DEPTH.ELEVATED - 1);
     this.placeTile(sceneX + 1 * TILE_SIZE, sceneY + 2 * TILE_SIZE, RAMP.A_LOWER, DEPTH.ELEVATED - 1);
