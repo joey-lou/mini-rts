@@ -148,11 +148,7 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 		for (let row = 0; row < rows; row++) {
 			for (let col = 0; col < cols; col++) {
 				const level = this.terrain.getLevel(row, col);
-				if (level === TerrainLevel.WATER) {
-					const x = col * TILE_SIZE + TILE_SIZE / 2;
-					const y = row * TILE_SIZE + TILE_SIZE / 2;
-					this.pathfinding.markBuildingBlocked(x, y, TILE_SIZE, TILE_SIZE);
-				}
+				this.pathfinding.setTerrainLevel(col, row, level);
 			}
 		}
 	}
@@ -709,10 +705,14 @@ export class GameScene extends Phaser.Scene implements ICombatScene {
 		this.units.forEach((u) => (u.otherUnits = this.units.filter((o) => o !== u)));
 	}
 
-	update(_time: number, delta: number): void {
+	update(time: number, delta: number): void {
 		this.economy.update(delta);
 		this.buildings.forEach((b) => b.getQueue()?.update(delta));
 		this.updateBuildingUnderConstruction(delta);
+
+		this.units.forEach((u) => {
+			if (u.active) u.update(time, delta);
+		});
 
 		this.updateEdgePan(delta);
 		this.updateKeyboardPan(delta);

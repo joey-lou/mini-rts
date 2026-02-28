@@ -16,7 +16,12 @@ export const TILE_SIZE = 64;
 /** Pixels to shift tile upward per elevation level (screen Y decreases = higher). */
 export const HEIGHT_PER_LEVEL = 24;
 
-/** Terrain height levels: WATER < FLAT < ELEVATED_1 < ELEVATED_2 < RAMP... */
+/**
+ * Terrain height levels. RAMP has a high numeric value (3) but is NOT
+ * actually elevated — it is a flat-level transition tile between flat
+ * and elevated terrain. Always use the helper predicates below instead
+ * of bare numeric comparisons when checking elevation.
+ */
 export enum TerrainLevel {
   WATER = -1,
   FLAT = 0,
@@ -25,21 +30,23 @@ export enum TerrainLevel {
   RAMP = 3,
 }
 
-/** Y-offset for rendering: 0 = flat, negative = drawn higher on screen. */
-export function getTerrainYOffset(level: TerrainLevel): number {
-  switch (level) {
-    case TerrainLevel.WATER:
-    case TerrainLevel.FLAT:
-      return 0;
-    case TerrainLevel.ELEVATED_1:
-      return -HEIGHT_PER_LEVEL;
-    case TerrainLevel.ELEVATED_2:
-      return -2 * HEIGHT_PER_LEVEL;
-    case TerrainLevel.RAMP:
-      return -HEIGHT_PER_LEVEL / 2;
-    default:
-      return 0;
-  }
+/** True for ELEVATED_1 or ELEVATED_2 (not RAMP, not FLAT, not WATER). */
+export function isElevated(level: TerrainLevel): boolean {
+  return level === TerrainLevel.ELEVATED_1 || level === TerrainLevel.ELEVATED_2;
+}
+
+/** True for any walkable ground (FLAT, ELEVATED_*, or RAMP). */
+export function isGround(level: TerrainLevel): boolean {
+  return level !== TerrainLevel.WATER;
+}
+
+/**
+ * Y-offset for rendering. All tiles render at their grid position (offset 0).
+ * Height illusion is created by compositing cliff body tiles in the row
+ * below the elevated surface, not by shifting tiles vertically.
+ */
+export function getTerrainYOffset(_level: TerrainLevel): number {
+  return 0;
 }
 
 /** 4-bit neighbor bitmask: N=1, E=2, S=4, W=8 */

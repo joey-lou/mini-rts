@@ -11,16 +11,14 @@
 
 import Phaser from 'phaser';
 import { TerrainMap } from './TerrainMap';
-import { TILE_SIZE, TerrainLevel, getTerrainYOffset, N, E, S, W } from './TerrainTypes';
+import { TILE_SIZE, TerrainLevel, getTerrainYOffset, isElevated, N, E, S, W } from './TerrainTypes';
 import {
   FLAT,
   ELEVATED_TOP,
   CLIFF,
-  RAMP,
   TilePosition,
   determineTilePosition,
-  determineRampPositionFromElevation,
-  getRampFrame,
+  getRampFrames,
 } from './TinySwordsTiles';
 
 /** Depth layers for proper rendering order */
@@ -177,7 +175,7 @@ export class TerrainRenderer {
     for (let row = 0; row < height; row++) {
       for (let col = 0; col < width; col++) {
         const level = this.map.getLevel(row, col);
-        if (level < TerrainLevel.FLAT || level === TerrainLevel.RAMP) continue;
+        if (level < TerrainLevel.FLAT) continue;
 
         const x = this.map.toPixelX(col);
         const y = this.map.toPixelY(row);
@@ -225,29 +223,33 @@ export class TerrainRenderer {
    * Render ramp tiles for cells with level RAMP.
    * Ramp frame is chosen from elevation neighbors (high = ELEVATED_1/ELEVATED_2) so slope goes low→high.
    */
+  /**
+   * Render ramp/stair tiles as vertically-paired composites (upper + lower frame).
+   */
   private renderRampTiles(): void {
     const { width, height } = this.map;
     const tilesetKey = 'terrain-tileset1';
     if (!this.scene.textures.exists(tilesetKey)) return;
-
-    const isHigh = (level: TerrainLevel) =>
-      level === TerrainLevel.ELEVATED_1 || level === TerrainLevel.ELEVATED_2;
 
     for (let row = 0; row < height; row++) {
       for (let col = 0; col < width; col++) {
         if (this.map.getLevel(row, col) !== TerrainLevel.RAMP) continue;
 
         const x = this.map.toPixelX(col);
-        const y = this.map.toPixelY(row) + getTerrainYOffset(TerrainLevel.RAMP);
-        const highN = isHigh(this.map.getLevel(row - 1, col));
-        const highE = isHigh(this.map.getLevel(row, col + 1));
-        const highS = isHigh(this.map.getLevel(row + 1, col));
-        const highW = isHigh(this.map.getLevel(row, col - 1));
-        const position = determineRampPositionFromElevation(highN, highE, highS, highW);
-        const frame = getRampFrame(position);
-        const tile = this.scene.add.sprite(x, y, tilesetKey, frame);
-        tile.setOrigin(0, 0).setDepth(DEPTH.RAMP_GROUND);
-        this.container!.add(tile);
+        const y = this.map.toPixelY(row);
+        const highN = isElevated(this.map.getLevel(row - 1, col));
+        const highE = isElevated(this.map.getLevel(row, col + 1));
+        const highS = isElevated(this.map.getLevel(row + 1, col));
+        const highW = isElevated(this.map.getLevel(row, col - 1));
+        const [upperFrame, lowerFrame] = getRampFrames(highN, highE, highS, highW);
+
+        const upper = this.scene.add.sprite(x, y, tilesetKey, upperFrame);
+        upper.setOrigin(0, 0).setDepth(DEPTH.RAMP_GROUND);
+        this.container!.add(upper);
+
+        const lower = this.scene.add.sprite(x, y + TILE_SIZE, tilesetKey, lowerFrame);
+        lower.setOrigin(0, 0).setDepth(DEPTH.RAMP_GROUND);
+        this.container!.add(lower);
       }
     }
   }
@@ -258,7 +260,7 @@ export class TerrainRenderer {
     for (let row = 0; row < height; row++) {
       for (let col = 0; col < width; col++) {
         const level = this.map.getLevel(row, col);
-        if (level < TerrainLevel.FLAT || level === TerrainLevel.RAMP) continue;
+        if (level < TerrainLevel.FLAT) continue;
 
         const x = this.map.toPixelX(col);
         const y = this.map.toPixelY(row);
@@ -277,7 +279,9 @@ export class TerrainRenderer {
   }
 
   /**
-   * Render elevated terrain with proper cliff faces and shadows.
+   * Render elevated terrain. Surface tiles at grid position (no Y offset).
+   * Cliff body tiles placed in the ROW BELOW south-boundary elevated cells
+   * to create the height illusion.
    */
   private renderElevatedTerrain(): void {
     const { width, height } = this.map;
@@ -290,21 +294,14 @@ export class TerrainRenderer {
       for (let row = 0; row < height; row++) {
         for (let col = 0; col < width; col++) {
           const cellLevel = this.map.getLevel(row, col);
-          if (cellLevel < level) continue;
+          if (!isElevated(cellLevel) || cellLevel < level) continue;
 
           const x = this.map.toPixelX(col);
-          const y = this.map.toPixelY(row) + getTerrainYOffset(level);
-          const depthShadow = DEPTH.SHADOW_BASE + level * 3;
+          const y = this.map.toPixelY(row);
           const depthCliff = DEPTH.CLIFF_BASE + level * 3;
           const depthElevated = DEPTH.ELEVATED_BASE + level * 3;
 
-          // Render shadow on tile below
-          this.renderShadow(row, col, level, depthShadow);
-
-          // Render cliff face if there's a drop to the south
-          this.renderCliff(row, col, level, depthCliff, tilesetKey, hasTexture);
-
-          // Render elevated surface
+          // Elevated surface at grid position
           if (hasTexture) {
             const frame = this.getElevatedFrame(row, col, level);
             const tile = this.scene.add.sprite(x, y, tilesetKey, frame);
@@ -314,14 +311,22 @@ export class TerrainRenderer {
             const colors = [0x5a8a5a, 0x6a9a6a, 0x7aaa7a];
             const color = colors[(level - 1) % colors.length];
             const rect = this.scene.add.rectangle(
-              x + TILE_SIZE / 2,
-              y + TILE_SIZE / 2,
-              TILE_SIZE - 2,
-              TILE_SIZE - 2,
-              color
+              x + TILE_SIZE / 2, y + TILE_SIZE / 2,
+              TILE_SIZE - 2, TILE_SIZE - 2, color,
             );
             rect.setDepth(depthElevated);
             this.container!.add(rect);
+          }
+
+          // Cliff body in the ROW BELOW for south-boundary cells
+          const southLevel = this.map.getLevel(row + 1, col);
+          const southIsElevated = isElevated(southLevel) && southLevel >= level;
+          if (!southIsElevated && hasTexture) {
+            const cliffFrame = this.getCliffFrame(row, col, level);
+            const cliffY = this.map.toPixelY(row + 1);
+            const cliff = this.scene.add.sprite(x, cliffY, tilesetKey, cliffFrame);
+            cliff.setOrigin(0, 0).setDepth(depthCliff);
+            this.container!.add(cliff);
           }
         }
       }
@@ -329,13 +334,29 @@ export class TerrainRenderer {
   }
 
   /**
+   * Select the cliff body frame for an elevated cell using the 3×3 cliff pattern.
+   * L/C/R determined by same-level elevated neighbors to the west/east.
+   */
+  private getCliffFrame(row: number, col: number, level: TerrainLevel): number {
+    const atLevel = (l: TerrainLevel): boolean => isElevated(l) && l >= level;
+    const elevW = atLevel(this.map.getLevel(row, col - 1));
+    const elevE = atLevel(this.map.getLevel(row, col + 1));
+
+    if (!elevW && !elevE) return CLIFF.TOP;      // isolated
+    if (!elevW && elevE) return CLIFF.TOP_LEFT;   // left edge
+    if (elevW && !elevE) return CLIFF.TOP_RIGHT;  // right edge
+    return CLIFF.TOP;                             // center
+  }
+
+  /**
    * Get the correct elevated surface frame based on neighboring tiles.
    */
   private getElevatedFrame(row: number, col: number, level: TerrainLevel): number {
-    const hasN = this.map.getLevel(row - 1, col) >= level;
-    const hasE = this.map.getLevel(row, col + 1) >= level;
-    const hasS = this.map.getLevel(row + 1, col) >= level;
-    const hasW = this.map.getLevel(row, col - 1) >= level;
+    const atLevel = (l: TerrainLevel): boolean => isElevated(l) && l >= level;
+    const hasN = atLevel(this.map.getLevel(row - 1, col));
+    const hasE = atLevel(this.map.getLevel(row, col + 1));
+    const hasS = atLevel(this.map.getLevel(row + 1, col));
+    const hasW = atLevel(this.map.getLevel(row, col - 1));
 
     const position = determineTilePosition(hasN, hasE, hasS, hasW);
     return this.elevatedPositionToFrame(position);
@@ -359,73 +380,6 @@ export class TerrainRenderer {
     return frames[position];
   }
 
-  /**
-   * Render cliff face below elevated terrain.
-   */
-  private renderCliff(
-    row: number,
-    col: number,
-    level: TerrainLevel,
-    depth: number,
-    tilesetKey: string,
-    hasTexture: boolean
-  ): void {
-    const southLevel = this.map.getLevel(row + 1, col);
-    if (southLevel >= level) return; // No cliff needed
-
-    const x = this.map.toPixelX(col);
-    const cliffY = this.map.toPixelY(row + 1);
-
-    if (hasTexture) {
-      // Determine cliff position
-      const hasW = this.map.getLevel(row, col - 1) >= level;
-      const hasE = this.map.getLevel(row, col + 1) >= level;
-
-      let cliffFrame: number;
-      if (!hasW && hasE) cliffFrame = CLIFF.LEFT;
-      else if (hasW && !hasE) cliffFrame = CLIFF.RIGHT;
-      else cliffFrame = CLIFF.CENTER;
-
-      const cliff = this.scene.add.sprite(x, cliffY, tilesetKey, cliffFrame);
-      cliff.setOrigin(0, 0).setDepth(depth);
-      this.container!.add(cliff);
-    } else {
-      const rect = this.scene.add.rectangle(
-        x + TILE_SIZE / 2,
-        cliffY + TILE_SIZE / 2,
-        TILE_SIZE - 2,
-        TILE_SIZE / 2,
-        0x6a6a7a
-      );
-      rect.setDepth(depth);
-      this.container!.add(rect);
-    }
-  }
-
-  /**
-   * Render shadow below elevated terrain.
-   */
-  private renderShadow(row: number, col: number, level: TerrainLevel, depth: number): void {
-    const southLevel = this.map.getLevel(row + 1, col);
-    if (southLevel >= level) return;
-
-    const x = this.map.toPixelX(col);
-    const shadowY = this.map.toPixelY(row + 1);
-    const shadowAlpha = 0.2 + (level - 1) * 0.05;
-
-    const shadow = this.scene.add.graphics();
-    shadow.setDepth(depth);
-
-    const shadowHeight = TILE_SIZE * 0.5;
-    for (let i = 0; i < 4; i++) {
-      const segHeight = shadowHeight / 4;
-      const segY = shadowY + i * segHeight;
-      const alpha = shadowAlpha * (1 - i * 0.25);
-      shadow.fillStyle(0x000000, alpha);
-      shadow.fillRect(x, segY, TILE_SIZE, segHeight);
-    }
-    this.container!.add(shadow);
-  }
 
   destroy(): void {
     if (this.foamTimer) {

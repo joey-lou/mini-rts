@@ -73,12 +73,19 @@ export const FLAT = {
   STRIP_BOTTOM: 45, // frame 45: vertical strip bottom
 } as const;
 
-/** Ramp/stairs tiles (row 4: frames 36–39). */
+/**
+ * Ramp/stairs tiles — two vertically-paired tiles per direction.
+ * Each pair has an UPPER frame (row 4) and a LOWER frame (row 5) that
+ * stack to create the full staircase connecting flat ground to elevated.
+ *
+ *   Pair A (col 0): 36 upper + 45 lower  — stairs ascending to the right/north
+ *   Pair B (col 1): 37 upper + 46 lower  — stairs ascending to the left/south
+ */
 export const RAMP = {
-  TOP_LEFT: 36,
-  TOP: 37,
-  TOP_RIGHT: 38,
-  BOTTOM: 39,
+  A_UPPER: 36,
+  A_LOWER: 45,
+  B_UPPER: 37,
+  B_LOWER: 46,
 } as const;
 
 /**
@@ -190,46 +197,21 @@ export function getCliffFrame(position: 'LEFT' | 'CENTER' | 'RIGHT'): number {
   }
 }
 
-export function getRampFrame(position: TilePosition): number {
-  const frames: Record<TilePosition, number> = {
-    [TilePosition.TOP_LEFT]: RAMP.TOP_LEFT,
-    [TilePosition.TOP]: RAMP.TOP,
-    [TilePosition.TOP_RIGHT]: RAMP.TOP_RIGHT,
-    [TilePosition.LEFT]: RAMP.TOP,
-    [TilePosition.CENTER]: RAMP.TOP,
-    [TilePosition.RIGHT]: RAMP.TOP,
-    [TilePosition.BOTTOM_LEFT]: RAMP.BOTTOM,
-    [TilePosition.BOTTOM]: RAMP.BOTTOM,
-    [TilePosition.BOTTOM_RIGHT]: RAMP.BOTTOM,
-  };
-  return frames[position];
-}
-
 /**
- * Determines ramp TilePosition from elevation of neighbors so the slope goes from low to high.
- * high = true when that neighbor is ELEVATED_1 or ELEVATED_2; low = FLAT or WATER.
+ * Choose a ramp frame pair (upper + lower) based on which direction has elevated terrain.
+ * Returns [upperFrame, lowerFrame] for vertical stacking.
  */
-export function determineRampPositionFromElevation(
+export function getRampFrames(
   highN: boolean,
   highE: boolean,
   highS: boolean,
-  highW: boolean
-): TilePosition {
-  if (highN && !highS) return TilePosition.TOP;
-  if (highS && !highN) return TilePosition.BOTTOM;
-  if (highE && !highW && !highN && !highS) return TilePosition.TOP_RIGHT;
-  if (highW && !highE && !highN && !highS) return TilePosition.TOP_LEFT;
-
-  if (highN && highE && !highS && !highW) return TilePosition.TOP_RIGHT;
-  if (highN && highW && !highS && !highE) return TilePosition.TOP_LEFT;
-  if (highS) return TilePosition.BOTTOM;
-
-  if (highE && highW && !highN && !highS) return TilePosition.TOP;
-  if (highN && highE && highW && !highS) return TilePosition.TOP;
-  if (highN) return TilePosition.TOP;
-
-  return TilePosition.TOP;
+  highW: boolean,
+): [number, number] {
+  if (highE || highN) return [RAMP.A_UPPER, RAMP.A_LOWER];
+  if (highW || highS) return [RAMP.B_UPPER, RAMP.B_LOWER];
+  return [RAMP.A_UPPER, RAMP.A_LOWER];
 }
+
 
 /**
  * Determines the tile position based on neighbors of the same terrain type.

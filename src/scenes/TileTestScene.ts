@@ -18,6 +18,7 @@ import {
   FLAT,
   ELEVATED_TOP,
   CLIFF,
+  RAMP,
   TilePosition,
   getFlatFrame,
   getElevatedTopFrame,
@@ -75,6 +76,7 @@ export class TileTestScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-THREE', () => this.switchTest(3, instructions));
     this.input.keyboard?.on('keydown-FOUR', () => this.switchTest(4, instructions));
     this.input.keyboard?.on('keydown-FIVE', () => this.switchTest(5, instructions));
+    this.input.keyboard?.on('keydown-SIX', () => this.switchTest(6, instructions));
     this.input.keyboard?.on('keydown-ESC', () => this.scene.start('MenuScene'));
 
     // Camera
@@ -96,7 +98,7 @@ export class TileTestScene extends Phaser.Scene {
   }
 
   private updateInstructions(text: Phaser.GameObjects.Text): void {
-    text.setText(`Test ${this.currentTest} | Keys: 1-5 switch tests | Arrow keys pan | Scroll zoom | ESC menu`);
+    text.setText(`Test ${this.currentTest} | Keys: 1-6 switch tests | Arrow keys pan | Scroll zoom | ESC menu`);
   }
 
   private switchTest(testNum: number, instructions: Phaser.GameObjects.Text): void {
@@ -121,6 +123,7 @@ export class TileTestScene extends Phaser.Scene {
       case 3: this.renderTest3_ElevatedPlatform(); break;
       case 4: this.renderTest4_MixedTerrain(); break;
       case 5: this.renderTest5_TilesetReference(); break;
+      case 6: this.renderTest6_RampStairs(); break;
     }
   }
 
@@ -429,6 +432,100 @@ export class TileTestScene extends Phaser.Scene {
       fontSize: '12px',
       color: '#aaaaaa',
     }).setDepth(DEPTH.UI);
+  }
+
+  /**
+   * Test 6: Elevation compositing + Ramp/stair paired tiles.
+   * Shows how elevated surface + cliff face stack to create height,
+   * and how stair pairs (upper+lower) create transitions.
+   */
+  private renderTest6_RampStairs(): void {
+    const startX = 50;
+    const startY = 100;
+    const tilesetKey = 'terrain-tileset1';
+
+    if (!this.textures.exists(tilesetKey)) {
+      this.addLabel(startX, startY, 'ERROR: Tileset not loaded!');
+      return;
+    }
+
+    this.addLabel(startX, startY - 40, 'Test 6: Elevation Compositing + Stair Pairs');
+
+    // Section A: Surface at grid pos, cliff in row below (south boundary)
+    this.addLabel(startX, startY, 'A) Surface at grid pos + cliff body in row below:');
+    const compY = startY + 20;
+    // Flat ground base (4 rows)
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 3; c++) {
+        this.placeTile(startX + c * TILE_SIZE, compY + r * TILE_SIZE, FLAT.CENTER, DEPTH.FLAT);
+      }
+    }
+    // Row 0: top elevated surface (no cliff — not south boundary)
+    for (let c = 0; c < 3; c++) {
+      const cx = startX + c * TILE_SIZE;
+      const surfF = c === 0 ? ELEVATED_TOP.TOP_LEFT : c === 2 ? ELEVATED_TOP.TOP_RIGHT : ELEVATED_TOP.TOP;
+      this.placeTile(cx, compY, surfF, DEPTH.ELEVATED);
+    }
+    // Row 1: bottom elevated surface (south boundary)
+    for (let c = 0; c < 3; c++) {
+      const cx = startX + c * TILE_SIZE;
+      const surfF = c === 0 ? ELEVATED_TOP.BOTTOM_LEFT : c === 2 ? ELEVATED_TOP.BOTTOM_RIGHT : ELEVATED_TOP.BOTTOM;
+      this.placeTile(cx, compY + TILE_SIZE, surfF, DEPTH.ELEVATED);
+    }
+    // Row 2: cliff body (in the row BELOW the south boundary surface)
+    for (let c = 0; c < 3; c++) {
+      const cx = startX + c * TILE_SIZE;
+      const cliffF = c === 0 ? CLIFF.TOP_LEFT : c === 2 ? CLIFF.TOP_RIGHT : CLIFF.TOP;
+      this.placeTile(cx, compY + TILE_SIZE * 2, cliffF, DEPTH.CLIFF);
+    }
+
+    // Section B: Show stair pairs
+    const pairY = compY + TILE_SIZE * 3 + 40;
+    this.addLabel(startX, pairY - 20, 'B) Stair pairs (upper + lower stacked):');
+
+    // Pair A: frames 36 + 45
+    this.addLabel(startX, pairY, 'Pair A (36+45):');
+    this.placeTile(startX, pairY + 16, RAMP.A_UPPER, DEPTH.ELEVATED - 1);
+    this.placeTile(startX, pairY + 16 + TILE_SIZE, RAMP.A_LOWER, DEPTH.ELEVATED - 1);
+    this.addFrameLabel(startX, pairY + 16, RAMP.A_UPPER);
+    this.addFrameLabel(startX, pairY + 16 + TILE_SIZE, RAMP.A_LOWER);
+
+    // Pair B: frames 37 + 46
+    const pairBX = startX + TILE_SIZE + 60;
+    this.addLabel(pairBX, pairY, 'Pair B (37+46):');
+    this.placeTile(pairBX, pairY + 16, RAMP.B_UPPER, DEPTH.ELEVATED - 1);
+    this.placeTile(pairBX, pairY + 16 + TILE_SIZE, RAMP.B_LOWER, DEPTH.ELEVATED - 1);
+    this.addFrameLabel(pairBX, pairY + 16, RAMP.B_UPPER);
+    this.addFrameLabel(pairBX, pairY + 16 + TILE_SIZE, RAMP.B_LOWER);
+
+    // Section C: Full composed scene with elevation + stairs
+    const sceneX = startX + TILE_SIZE * 4 + 20;
+    const sceneY = startY + 20;
+    this.addLabel(sceneX, sceneY - 20, 'C) Composed scene:');
+
+    // Flat ground (5×5)
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        const pos = determineTilePosition(r > 0, c < 4, r < 4, c > 0);
+        this.placeTile(sceneX + c * TILE_SIZE, sceneY + r * TILE_SIZE, getFlatFrame(pos), DEPTH.FLAT);
+      }
+    }
+    // Elevated (2×2): surface at grid pos, cliff in row below south boundary
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 2; c++) {
+        const gx = sceneX + (c + 2) * TILE_SIZE;
+        const gy = sceneY + (r + 1) * TILE_SIZE;
+        const pos = determineTilePosition(r > 0, c < 1, r < 1, c > 0);
+        this.placeTile(gx, gy, getElevatedTopFrame(pos), DEPTH.ELEVATED);
+        if (r === 1) {
+          const cliffF = c === 0 ? CLIFF.TOP_LEFT : CLIFF.TOP_RIGHT;
+          this.placeTile(gx, gy + TILE_SIZE, cliffF, DEPTH.CLIFF);
+        }
+      }
+    }
+    // Stair pair next to elevated
+    this.placeTile(sceneX + 1 * TILE_SIZE, sceneY + 1 * TILE_SIZE, RAMP.A_UPPER, DEPTH.ELEVATED - 1);
+    this.placeTile(sceneX + 1 * TILE_SIZE, sceneY + 2 * TILE_SIZE, RAMP.A_LOWER, DEPTH.ELEVATED - 1);
   }
 
   /**

@@ -14,7 +14,7 @@ export class MenuScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#1a2a1a');
 
     this.loadMapErrorText = this.add
-      .text(width / 2, height - 120, '', {
+      .text(width / 2, height - 60, '', {
         fontSize: '16px',
         fontFamily: 'Arial',
         color: '#cc6666',
@@ -24,119 +24,162 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setVisible(false);
 
+    // Decorative frame
+    const frameW = 460;
+    const frameH = 520;
+    const frameX = width / 2;
+    const frameY = height / 2;
+
+    const frameBg = this.add.rectangle(frameX, frameY, frameW, frameH, 0x1e2e1e, 0.7);
+    frameBg.setStrokeStyle(2, 0x4a5a3a, 0.8);
+
+    const innerFrame = this.add.rectangle(frameX, frameY, frameW - 12, frameH - 12);
+    innerFrame.setStrokeStyle(1, 0x3a4a2a, 0.5);
+
+    // Layout: vertically centered content inside the frame
+    const topY = frameY - frameH / 2;
+    const titleY = topY + 80;
+    const subtitleY = titleY + 50;
+    const divider1Y = subtitleY + 40;
+    const btnStartY = divider1Y + 44;
+    const btnLoadY = btnStartY + 52;
+    const divider2Y = btnLoadY + 50;
+    const btnTileY = divider2Y + 40;
+    const btnEditorY = btnTileY + 52;
+    const hintY = frameY + frameH / 2 - 36;
+
     // Title
-    this.add.text(width / 2, height / 3, 'MEDIEVAL KEEP', {
-      fontSize: '56px',
+    this.add.text(frameX, titleY, 'MEDIEVAL KEEP', {
+      fontSize: '48px',
       fontFamily: 'Georgia',
       color: '#e8d4a0',
       stroke: '#2c1810',
-      strokeThickness: 4
+      strokeThickness: 4,
     }).setOrigin(0.5);
 
     // Subtitle
-    this.add.text(width / 2, height / 3 + 70, 'A strategy demo', {
-      fontSize: '22px',
+    this.add.text(frameX, subtitleY, 'A strategy demo', {
+      fontSize: '20px',
       fontFamily: 'Georgia',
-      color: '#8a9a6a'
+      color: '#8a9a6a',
     }).setOrigin(0.5);
 
-    // Start button
-    const startButton = this.add.text(width / 2, height / 2 + 40, '[  START DEMO  ]', {
-      fontSize: '28px',
+    // Divider
+    this.drawDivider(frameX, divider1Y, 200);
+
+    // Button style helper
+    const btnStyle = {
+      fontSize: '22px',
       fontFamily: 'Georgia',
       color: '#c4a454',
-      backgroundColor: '#3d4a2a',
-      padding: { x: 24, y: 12 }
-    })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+      backgroundColor: '#2e3e22',
+      padding: { x: 28, y: 10 },
+    };
+    const btnHover = { color: '#f0e0b0', backgroundColor: '#3e4e2e' };
+    const btnNormal = { color: '#c4a454', backgroundColor: '#2e3e22' };
 
-    startButton.on('pointerover', () => {
-      startButton.setStyle({ color: '#e8d4a0', backgroundColor: '#4a5a32' });
-    });
+    const secondaryStyle = {
+      fontSize: '20px',
+      fontFamily: 'Georgia',
+      color: '#8a9a6a',
+      backgroundColor: '#263226',
+      padding: { x: 24, y: 8 },
+    };
+    const secHover = { color: '#c4b484', backgroundColor: '#344434' };
+    const secNormal = { color: '#8a9a6a', backgroundColor: '#263226' };
 
-    startButton.on('pointerout', () => {
-      startButton.setStyle({ color: '#c4a454', backgroundColor: '#3d4a2a' });
-    });
-
-    startButton.on('pointerdown', () => {
+    // Start Demo button
+    const startButton = this.createButton(frameX, btnStartY, 'START DEMO', btnStyle, btnHover, btnNormal, () => {
       this.scene.start('GameScene');
     });
 
-    // Load Map & Play button
-    const loadMapButton = this.add.text(width / 2, height / 2 + 80, '[  LOAD MAP & PLAY  ]', {
-      fontSize: '20px',
-      fontFamily: 'Georgia',
-      color: '#8a9a6a',
-      backgroundColor: '#2a3a2a',
-      padding: { x: 18, y: 8 }
-    })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-
-    loadMapButton.on('pointerover', () => {
-      loadMapButton.setStyle({ color: '#c4b484', backgroundColor: '#3a4a32' });
-    });
-
-    loadMapButton.on('pointerout', () => {
-      loadMapButton.setStyle({ color: '#8a9a6a', backgroundColor: '#2a3a2a' });
-    });
-
-    loadMapButton.on('pointerdown', () => {
+    // Load Map button
+    const loadMapButton = this.createButton(frameX, btnLoadY, 'LOAD MAP & PLAY', btnStyle, btnHover, btnNormal, () => {
       this.promptLoadMap();
     });
 
+    // Divider between game and tools
+    this.drawDivider(frameX, divider2Y, 140);
+
     // Tile Test button
-    const tileTestButton = this.add.text(width / 2, height / 2 + 110, '[  TILE TEST  ]', {
-      fontSize: '20px',
-      fontFamily: 'Georgia',
-      color: '#8a9a6a',
-      backgroundColor: '#2a3a2a',
-      padding: { x: 18, y: 8 }
-    })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-
-    tileTestButton.on('pointerover', () => {
-      tileTestButton.setStyle({ color: '#c4b484', backgroundColor: '#3a4a32' });
-    });
-
-    tileTestButton.on('pointerout', () => {
-      tileTestButton.setStyle({ color: '#8a9a6a', backgroundColor: '#2a3a2a' });
-    });
-
-    tileTestButton.on('pointerdown', () => {
+    const tileTestButton = this.createButton(frameX, btnTileY, 'TILE TEST', secondaryStyle, secHover, secNormal, () => {
       this.scene.start('TileTestScene');
     });
 
     // Map Editor button
-    const mapEditorButton = this.add.text(width / 2, height / 2 + 180, '[  MAP EDITOR  ]', {
-      fontSize: '20px',
-      fontFamily: 'Georgia',
-      color: '#8a9a6a',
-      backgroundColor: '#2a3a2a',
-      padding: { x: 18, y: 8 }
-    })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-
-    mapEditorButton.on('pointerover', () => {
-      mapEditorButton.setStyle({ color: '#c4b484', backgroundColor: '#3a4a32' });
-    });
-
-    mapEditorButton.on('pointerout', () => {
-      mapEditorButton.setStyle({ color: '#8a9a6a', backgroundColor: '#2a3a2a' });
-    });
-
-    mapEditorButton.on('pointerdown', () => {
+    const mapEditorButton = this.createButton(frameX, btnEditorY, 'MAP EDITOR', secondaryStyle, secHover, secNormal, () => {
       this.scene.start('MapEditorScene');
     });
 
-    this.add.text(width / 2, height - 80, 'Select units • Right-click to move', {
-      fontSize: '16px',
+    // Hint text
+    this.add.text(frameX, hintY, 'Select units \u2022 Right-click to move', {
+      fontSize: '14px',
       fontFamily: 'Arial',
-      color: '#6a7a5a'
+      color: '#5a6a4a',
     }).setOrigin(0.5);
+
+    // Corner decorations
+    const cornerSize = 12;
+    const cColor = 0x6a7a5a;
+    const cAlpha = 0.5;
+    for (const [cx, cy] of [
+      [frameX - frameW / 2 + 10, frameY - frameH / 2 + 10],
+      [frameX + frameW / 2 - 10, frameY - frameH / 2 + 10],
+      [frameX - frameW / 2 + 10, frameY + frameH / 2 - 10],
+      [frameX + frameW / 2 - 10, frameY + frameH / 2 - 10],
+    ] as [number, number][]) {
+      const corner = this.add.graphics();
+      corner.lineStyle(2, cColor, cAlpha);
+      const isLeft = cx < frameX;
+      const isTop = cy < frameY;
+      const dx = isLeft ? cornerSize : -cornerSize;
+      const dy = isTop ? cornerSize : -cornerSize;
+      corner.beginPath();
+      corner.moveTo(cx + dx, cy);
+      corner.lineTo(cx, cy);
+      corner.lineTo(cx, cy + dy);
+      corner.strokePath();
+    }
+  }
+
+  private createButton(
+    x: number,
+    y: number,
+    label: string,
+    style: Phaser.Types.GameObjects.Text.TextStyle,
+    hoverStyle: Record<string, string>,
+    normalStyle: Record<string, string>,
+    onClick: () => void,
+  ): Phaser.GameObjects.Text {
+    const btn = this.add
+      .text(x, y, label, style)
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+
+    btn.on('pointerover', () => btn.setStyle(hoverStyle));
+    btn.on('pointerout', () => btn.setStyle(normalStyle));
+    btn.on('pointerdown', onClick);
+    return btn;
+  }
+
+  private drawDivider(x: number, y: number, halfWidth: number): void {
+    const g = this.add.graphics();
+    g.lineStyle(1, 0x4a5a3a, 0.6);
+    g.beginPath();
+    g.moveTo(x - halfWidth, y);
+    g.lineTo(x - 8, y);
+    g.moveTo(x + 8, y);
+    g.lineTo(x + halfWidth, y);
+    g.strokePath();
+    const diamond = this.add.graphics();
+    diamond.lineStyle(1, 0x6a7a5a, 0.5);
+    diamond.beginPath();
+    diamond.moveTo(x, y - 4);
+    diamond.lineTo(x + 4, y);
+    diamond.lineTo(x, y + 4);
+    diamond.lineTo(x - 4, y);
+    diamond.closePath();
+    diamond.strokePath();
   }
 
   private promptLoadMap(): void {
